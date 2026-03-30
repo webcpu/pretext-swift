@@ -111,9 +111,9 @@ public struct BenchmarkView: View {
 
     private var emptyState: some View {
         VStack(spacing: 8) {
-            Text("4 tests comparing text layout performance")
+            Text("5 tests comparing text layout performance")
                 .foregroundStyle(.white.opacity(0.4))
-            Text("Batch \u{00B7} Reflow \u{00B7} Line-by-Line \u{00B7} Thrashing")
+            Text("Batch \u{00B7} Reflow \u{00B7} Line-by-Line \u{00B7} Thrashing \u{00B7} Masonry")
                 .font(.system(size: 13, design: .monospaced))
                 .foregroundStyle(.white.opacity(0.25))
         }
@@ -220,30 +220,36 @@ public struct BenchmarkView: View {
         }
 
         results = []
-        state = .running("Test 1/4: Batch Prepare + Layout...")
+        state = .running("Test 1/5: Batch Prepare + Layout...")
 
         Task.detached {
             let r1 = runBatchPrepareAndLayout()
             await MainActor.run {
                 results.append(r1)
-                state = .running("Test 2/4: Reflow at 100 Widths...")
+                state = .running("Test 2/5: Reflow at 100 Widths...")
             }
 
             let r2 = runReflowAtDifferentWidths()
             await MainActor.run {
                 results.append(r2)
-                state = .running("Test 3/4: Variable-Width Line-by-Line...")
+                state = .running("Test 3/5: Variable-Width Line-by-Line...")
             }
 
             let r3 = runVariableWidthLineByLine()
             await MainActor.run {
                 results.append(r3)
-                state = .running("Test 4/4: Interleaved Measure-Mutate...")
+                state = .running("Test 4/5: Interleaved Measure-Mutate...")
             }
 
             let r4 = runInterleavedMeasureMutate()
             await MainActor.run {
                 results.append(r4)
+                state = .running("Test 5/5: Masonry Heights...")
+            }
+
+            let r5 = runMasonryHeights()
+            await MainActor.run {
+                results.append(r5)
                 state = .done
             }
         }

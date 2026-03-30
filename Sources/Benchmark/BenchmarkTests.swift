@@ -202,6 +202,49 @@ func runInterleavedMeasureMutate() -> BenchmarkResult {
     )
 }
 
+// MARK: - Test 5: Masonry Heights (1904 shower thoughts)
+
+func runMasonryHeights() -> BenchmarkResult {
+    let texts = BenchmarkCorpus.masonryTexts
+    let fontDescriptor = FontDescriptor(familyName: "Helvetica Neue", size: 15)
+    let font = fontDescriptor.makeCTFont()
+    let displayFont = fontDescriptor.makeDisplayFont()
+    let colWidth = 368.0  // typical column width at ~1280px viewport
+    let textWidth = colWidth - 32  // minus card padding * 2
+    let lineHeight = 22.0
+
+    // Pretext: prepare + layout for all 1904 texts
+    let pretextMs = measureMedian {
+        for text in texts {
+            var prepared = prepare(text, font: font)
+            _ = layout(&prepared, maxWidth: textWidth, lineHeight: lineHeight)
+        }
+    }
+
+    // Core Text: CTFramesetter for each text
+    let coreTextMs = measureMedian {
+        for text in texts {
+            _ = coreTextMeasureHeight(text: text, font: font, width: colWidth)
+        }
+    }
+
+    // SwiftUI: NSHostingView + fittingSize for each text
+    let swiftUIMs = measureMedianMainActor {
+        for text in texts {
+            _ = swiftUIMeasureHeight(text: text, font: displayFont, width: colWidth)
+        }
+    }
+
+    return BenchmarkResult(
+        name: "Masonry Heights (1904 texts)",
+        pretextMs: pretextMs,
+        coreTextMs: coreTextMs,
+        swiftUIMs: swiftUIMs,
+        speedupVsCoreText: coreTextMs / max(pretextMs, 0.001),
+        speedupVsSwiftUI: swiftUIMs / max(pretextMs, 0.001)
+    )
+}
+
 // MARK: - Main actor helper
 
 /// Runs a closure on the main actor and returns measured median time.

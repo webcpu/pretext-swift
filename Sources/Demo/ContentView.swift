@@ -4,6 +4,7 @@ import SwiftUI
 enum DemoScreen: String, CaseIterable, Identifiable {
     case situationalAwareness
     case editorialEngine
+    case masonry
     case benchmark
 
     var id: String { rawValue }
@@ -14,6 +15,8 @@ enum DemoScreen: String, CaseIterable, Identifiable {
             "Situational Awareness"
         case .editorialEngine:
             "Editorial Engine"
+        case .masonry:
+            "Masonry"
         case .benchmark:
             "Benchmark"
         }
@@ -30,6 +33,8 @@ struct ContentView: View {
                 EditorialView()
             case .editorialEngine:
                 OrbEditorialView()
+            case .masonry:
+                MasonryView()
             case .benchmark:
                 BenchmarkView()
             }
@@ -43,7 +48,7 @@ struct ContentView: View {
                     }
                 }
                 .pickerStyle(.segmented)
-                .frame(maxWidth: 420)
+                .frame(maxWidth: 520)
             }
         }
     }

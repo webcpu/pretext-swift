@@ -79,6 +79,35 @@ enum BenchmarkCorpus {
     """
     // swiftlint:enable line_length
 
+    /// 1904 short texts (3-40 words) matching the masonry shower-thoughts profile.
+    static let masonryTexts: [String] = buildMasonryCorpus()
+
+    private static func buildMasonryCorpus() -> [String] {
+        let words = corpusSourceText
+            .components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty }
+
+        var result: [String] = []
+        var index = 0
+
+        func take(_ count: Int) -> String {
+            var collected: [String] = []
+            for _ in 0..<count {
+                collected.append(words[index % words.count])
+                index += 1
+            }
+            return collected.joined(separator: " ")
+        }
+
+        // Shower thoughts are mostly 3-40 words, heavily skewed short
+        for i in 0..<1904 {
+            let wordCount = 3 + (i * 7 + i * i / 13) % 38
+            result.append(take(wordCount))
+        }
+
+        return result
+    }
+
     private static func buildCorpus() -> [String] {
         let words = corpusSourceText
             .components(separatedBy: .whitespacesAndNewlines)
