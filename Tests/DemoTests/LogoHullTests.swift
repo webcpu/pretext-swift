@@ -2,6 +2,15 @@ import XCTest
 @testable import Demo
 
 final class LogoHullTests: XCTestCase {
+    func testBundledRasterLogoResourcesExistForIOS() {
+        for resourceName in ["openai-symbol", "claude-symbol"] {
+            XCTAssertTrue(
+                FileManager.default.fileExists(atPath: pngResourceURL(named: resourceName).path),
+                "Expected PNG resource for \(resourceName)"
+            )
+        }
+    }
+
     func testBundledLogoResourcesUseRealPathMarkup() throws {
         for resourceName in ["openai-symbol", "claude-symbol"] {
             let contents = try String(
@@ -29,4 +38,12 @@ private func resourceURL(named resourceName: String) -> URL {
         .deletingLastPathComponent()
         .deletingLastPathComponent()
         .appendingPathComponent("Sources/Demo/Resources/\(resourceName).svg")
+}
+
+private func pngResourceURL(named resourceName: String) -> URL {
+    URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .appendingPathComponent("Sources/Demo/Resources/\(resourceName).png")
 }

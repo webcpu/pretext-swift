@@ -1,5 +1,3 @@
-#if os(macOS)
-import AppKit
 import Pretext
 import PretextUI
 import SwiftUI
@@ -25,7 +23,7 @@ private enum OrbPointerCursor: Equatable {
     case grab
     case grabbing
 
-    var nsCursor: NSCursor? {
+    var demoCursor: DemoPointerCursor? {
         switch self {
         case .none:
             nil
@@ -34,44 +32,6 @@ private enum OrbPointerCursor: Equatable {
         case .grabbing:
             .closedHand
         }
-    }
-}
-
-private struct PointerCursorModifier: ViewModifier {
-    var cursor: OrbPointerCursor
-    @State private var appliedCursor: OrbPointerCursor = .none
-
-    func body(content: Content) -> some View {
-        content
-            .onAppear {
-                syncCursor(to: cursor)
-            }
-            .onChange(of: cursor, initial: true) { _, newCursor in
-                syncCursor(to: newCursor)
-            }
-            .onDisappear {
-                syncCursor(to: .none)
-            }
-    }
-
-    private func syncCursor(to newCursor: OrbPointerCursor) {
-        guard newCursor != appliedCursor else {
-            return
-        }
-
-        if appliedCursor != .none {
-            NSCursor.pop()
-        }
-        if let cursor = newCursor.nsCursor {
-            cursor.push()
-        }
-        appliedCursor = newCursor
-    }
-}
-
-private extension View {
-    func orbPointerCursor(_ cursor: OrbPointerCursor) -> some View {
-        modifier(PointerCursorModifier(cursor: cursor))
     }
 }
 
@@ -108,7 +68,7 @@ private struct OrbSceneState {
             &orbs,
             pageSize: pageSize,
             dt: dt,
-            topInset: OrbEditorialMetrics.gutter * 0.5,
+            topInset: OrbEditorialMetrics.profile(for: pageSize.width).gutter * 0.5,
             bottomInset: OrbEditorialMetrics.statsBarHeight
         )
         updateFPS(now: now)
@@ -161,6 +121,15 @@ private struct OrbSceneState {
         self.drag = nil
     }
 
+    mutating func togglePause(at point: CGPoint, pageSize: CGSize) {
+        ensureInitialized(pageSize: pageSize)
+        pointerLocation = point
+        guard let orbIndex = hitTestOrb(at: point, in: orbs) else {
+            return
+        }
+        orbs[orbIndex].paused.toggle()
+    }
+
     func hoveredOrbIndex(in orbs: [OrbState]) -> Int? {
         guard let pointerLocation else {
             return nil
@@ -185,8 +154,10 @@ private struct OrbHintPillView: View {
     )
     .makeDisplayFont()
 
+    let pauseVerb: String
+
     var body: some View {
-        Text("Drag the orbs · Click to pause · Text reflows at 60fps · Zero DOM reads")
+        Text("Drag the orbs · \(pauseVerb) to pause · Text reflows at 60fps · Zero DOM reads")
             .font(Self.font)
             .foregroundStyle(OrbEditorialPalette.hintText)
             .padding(.horizontal, 16)
@@ -254,18 +225,46 @@ private struct OrbStatsBarView: View {
     }
 }
 
+private struct OrbPullquoteStaticView: View {
+    let pullquote: OrbEditorialPullquoteBlock
+    let fontSize: Double
+    let lineHeight: Double
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            Rectangle()
+                .fill(OrbEditorialPalette.pullquoteBorder)
+                .frame(width: 3, height: pullquote.rect.height)
+                .offset(x: pullquote.rect.x, y: pullquote.rect.y)
+
+            ForEach(Array(pullquote.lines.enumerated()), id: \.offset) { _, line in
+                Text(line.text)
+                    .font(OrbEditorialMetrics.pullquoteFontDescriptor(size: fontSize).makeDisplayFont())
+                    .foregroundStyle(OrbEditorialPalette.pullquoteText)
+                    .frame(height: lineHeight, alignment: .topLeading)
+                    .offset(x: line.x, y: line.y)
+            }
+        }
+        .allowsHitTesting(false)
+    }
+}
+
 struct OrbEditorialView: View {
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var scene = OrbSceneState()
 
     var body: some View {
         GeometryReader { proxy in
             TimelineView(.animation(paused: false)) { timeline in
                 let now = timeline.date.timeIntervalSinceReferenceDate
-                let pageSize = proxy.size
-                let displayOrbs = scene.orbs.isEmpty ? makeInitialOrbStates(pageSize: pageSize) : scene.orbs
+                let viewportSize = proxy.size
+                let displayOrbs = scene.orbs.isEmpty ? makeInitialOrbStates(pageSize: viewportSize) : scene.orbs
+                let isPhoneLayout = horizontalSizeClass == .compact
+                let pageHeight = max(Double(viewportSize.height), 1)
                 let snapshot = evaluateOrbEditorialLayout(
-                    pageWidth: max(Double(pageSize.width), 1),
-                    pageHeight: max(Double(pageSize.height), 1),
+                    pageWidth: max(Double(viewportSize.width), 1),
+                    pageHeight: pageHeight,
+                    compositionHeight: isPhoneLayout ? max(Double(viewportSize.height), 1) : nil,
                     orbs: displayOrbs
                 )
                 let cursor: OrbPointerCursor = if scene.drag != nil {
@@ -276,99 +275,235 @@ struct OrbEditorialView: View {
                     .none
                 }
 
-                ZStack(alignment: .topLeading) {
-                    Canvas(opaque: true, rendersAsynchronously: true) { context, size in
-                        drawBackground(in: &context, size: size)
-
-                        for orb in displayOrbs {
-                            drawOrb(orb, in: &context)
-                        }
-
-                        for line in snapshot.headlineLines {
-                            drawTextLine(
-                                line,
-                                in: &context,
-                                font: Font(OrbEditorialMetrics.headlineFont(size: snapshot.headlineFontSize)),
-                                color: OrbEditorialPalette.headline,
-                                tracking: -0.5
-                            )
-                        }
-
-                        for line in snapshot.bodyLines {
-                            drawTextLine(
-                                line,
-                                in: &context,
-                                font: OrbEditorialMetrics.bodyFontDescriptor.makeDisplayFont(),
-                                color: OrbEditorialPalette.bodyText
-                            )
-                        }
-
-                        drawTextLine(
-                            PositionedLine(
-                                x: snapshot.dropCapPosition.x,
-                                y: snapshot.dropCapPosition.y,
-                                width: snapshot.dropCapRect.width,
-                                text: String(OrbEditorialText.body.prefix(1))
-                            ),
-                            in: &context,
-                            font: Font(OrbEditorialMetrics.dropCapFont()),
-                            color: OrbEditorialPalette.dropCap
+                Group {
+                    if isPhoneLayout {
+                        phoneLayout(
+                            viewportSize: viewportSize,
+                            snapshot: snapshot,
+                            displayOrbs: displayOrbs,
+                            cursor: cursor,
+                            hintPauseVerb: "Tap"
                         )
-
-                        for pullquote in snapshot.pullquotes {
-                            drawPullquote(pullquote, in: &context)
-                        }
-                    }
-                    .frame(width: pageSize.width, height: pageSize.height)
-                    .contentShape(Rectangle())
-                    .gesture(
-                        DragGesture(minimumDistance: 0, coordinateSpace: .local)
-                            .onChanged { value in
-                                if scene.drag == nil {
-                                    scene.beginDrag(at: value.startLocation, pageSize: pageSize)
-                                }
-                                scene.updateDrag(at: value.location)
-                            }
-                            .onEnded { value in
-                                scene.endDrag(at: value.location)
-                            }
-                    )
-                    .onContinuousHover(coordinateSpace: .local) { phase in
-                        switch phase {
-                        case let .active(location):
-                            scene.setPointerLocation(location)
-                        case .ended:
-                            scene.setPointerLocation(nil)
-                        }
-                    }
-                    .orbPointerCursor(cursor)
-
-                    OrbHintPillView()
-                        .frame(maxWidth: .infinity, alignment: .center)
-                        .padding(.top, 40)
-                        .zIndex(2)
-
-                    VStack {
-                        Spacer(minLength: 0)
-                        OrbStatsBarView(
-                            lineCount: snapshot.bodyLines.count,
-                            reflowMilliseconds: snapshot.reflowMilliseconds,
-                            fps: scene.fpsDisplay,
-                            columnCount: snapshot.columnCount
+                    } else {
+                        desktopLayout(
+                            pageSize: viewportSize,
+                            snapshot: snapshot,
+                            displayOrbs: displayOrbs,
+                            cursor: cursor,
+                            hintPauseVerb: "Click"
                         )
                     }
-                    .zIndex(2)
                 }
-                .frame(width: pageSize.width, height: pageSize.height)
                 .background(OrbEditorialPalette.backgroundOuter)
-                .clipped()
                 .onChange(of: now, initial: true) { _, newTime in
-                    scene.advance(now: newTime, pageSize: pageSize)
+                    scene.advance(now: newTime, pageSize: viewportSize)
                 }
             }
         }
         .ignoresSafeArea()
         .preferredColorScheme(.dark)
+    }
+
+    @ViewBuilder
+    private func desktopLayout(
+        pageSize: CGSize,
+        snapshot: OrbEditorialSnapshot,
+        displayOrbs: [OrbState],
+        cursor: OrbPointerCursor,
+        hintPauseVerb: String
+    ) -> some View {
+        ZStack(alignment: .topLeading) {
+            orbCanvas(
+                canvasSize: CGSize(width: pageSize.width, height: pageSize.height),
+                snapshot: snapshot,
+                displayOrbs: displayOrbs,
+                includeStaticText: true
+            )
+            .frame(width: pageSize.width, height: pageSize.height)
+            .contentShape(Rectangle())
+            .gesture(orbDragGesture(in: pageSize))
+            .demoContinuousHover { location in
+                scene.setPointerLocation(location)
+            }
+            .demoPointerCursor(cursor.demoCursor)
+
+            OrbHintPillView(pauseVerb: hintPauseVerb)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.top, 40)
+                .zIndex(2)
+
+            VStack {
+                Spacer(minLength: 0)
+                OrbStatsBarView(
+                    lineCount: snapshot.bodyLines.count,
+                    reflowMilliseconds: snapshot.reflowMilliseconds,
+                    fps: scene.fpsDisplay,
+                    columnCount: snapshot.columnCount
+                )
+            }
+            .zIndex(2)
+        }
+        .frame(width: pageSize.width, height: pageSize.height)
+        .clipped()
+    }
+
+    @ViewBuilder
+    private func phoneLayout(
+        viewportSize: CGSize,
+        snapshot: OrbEditorialSnapshot,
+        displayOrbs: [OrbState],
+        cursor: OrbPointerCursor,
+        hintPauseVerb: String
+    ) -> some View {
+        ZStack(alignment: .topLeading) {
+            orbCanvas(
+                canvasSize: viewportSize,
+                snapshot: snapshot,
+                displayOrbs: displayOrbs,
+                includeStaticText: false
+            )
+            .frame(width: viewportSize.width, height: viewportSize.height)
+            .contentShape(Rectangle())
+            .simultaneousGesture(orbTapGesture(in: viewportSize))
+            .simultaneousGesture(orbDragGesture(in: viewportSize))
+            .demoContinuousHover { location in
+                scene.setPointerLocation(location)
+            }
+            .demoPointerCursor(cursor.demoCursor)
+
+            phoneStaticTextLayer(snapshot: snapshot)
+
+            OrbHintPillView(pauseVerb: hintPauseVerb)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.top, 40)
+                .zIndex(2)
+
+            VStack {
+                Spacer(minLength: 0)
+                OrbStatsBarView(
+                    lineCount: snapshot.bodyLines.count,
+                    reflowMilliseconds: snapshot.reflowMilliseconds,
+                    fps: scene.fpsDisplay,
+                    columnCount: snapshot.columnCount
+                )
+            }
+            .zIndex(2)
+        }
+        .frame(width: viewportSize.width, height: viewportSize.height)
+        .clipped()
+    }
+
+    @ViewBuilder
+    private func phoneStaticTextLayer(snapshot: OrbEditorialSnapshot) -> some View {
+        ZStack(alignment: .topLeading) {
+            ForEach(Array(snapshot.headlineLines.enumerated()), id: \.offset) { _, line in
+                Text(line.text)
+                    .font(Font(OrbEditorialMetrics.headlineFont(size: snapshot.headlineFontSize)))
+                    .kerning(-0.5)
+                    .foregroundStyle(OrbEditorialPalette.headline)
+                    .frame(height: snapshot.headlineLineHeight, alignment: .topLeading)
+                    .offset(x: line.x, y: line.y)
+            }
+
+            Text(String(OrbEditorialText.body.prefix(1)))
+                .font(Font(OrbEditorialMetrics.dropCapFont(size: snapshot.dropCapSize)))
+                .foregroundStyle(OrbEditorialPalette.dropCap)
+                .frame(width: snapshot.dropCapRect.width, height: snapshot.dropCapRect.height, alignment: .topLeading)
+                .offset(x: snapshot.dropCapPosition.x, y: snapshot.dropCapPosition.y)
+
+            ForEach(Array(snapshot.pullquotes.enumerated()), id: \.offset) { _, pullquote in
+                OrbPullquoteStaticView(
+                    pullquote: pullquote,
+                    fontSize: snapshot.pullquoteFontSize,
+                    lineHeight: snapshot.pullquoteLineHeight
+                )
+            }
+        }
+        .allowsHitTesting(false)
+        .zIndex(1)
+    }
+
+    @ViewBuilder
+    private func orbCanvas(
+        canvasSize: CGSize,
+        snapshot: OrbEditorialSnapshot,
+        displayOrbs: [OrbState],
+        includeStaticText: Bool
+    ) -> some View {
+        Canvas(opaque: true, rendersAsynchronously: true) { context, size in
+            drawBackground(in: &context, size: size)
+
+            for orb in displayOrbs {
+                drawOrb(orb, in: &context)
+            }
+
+            if includeStaticText {
+                for line in snapshot.headlineLines {
+                    drawTextLine(
+                        line,
+                        in: &context,
+                        font: Font(OrbEditorialMetrics.headlineFont(size: snapshot.headlineFontSize)),
+                        color: OrbEditorialPalette.headline,
+                        tracking: -0.5
+                    )
+                }
+            }
+
+            for line in snapshot.bodyLines {
+                drawTextLine(
+                    line,
+                    in: &context,
+                    font: OrbEditorialMetrics.bodyFontDescriptor(size: snapshot.bodyFontSize).makeDisplayFont(),
+                    color: OrbEditorialPalette.bodyText
+                )
+            }
+
+            if includeStaticText {
+                drawTextLine(
+                    PositionedLine(
+                        x: snapshot.dropCapPosition.x,
+                        y: snapshot.dropCapPosition.y,
+                        width: snapshot.dropCapRect.width,
+                        text: String(OrbEditorialText.body.prefix(1))
+                    ),
+                    in: &context,
+                    font: Font(OrbEditorialMetrics.dropCapFont(size: snapshot.dropCapSize)),
+                    color: OrbEditorialPalette.dropCap
+                )
+
+                for pullquote in snapshot.pullquotes {
+                    drawPullquote(
+                        pullquote,
+                        fontSize: snapshot.pullquoteFontSize,
+                        in: &context
+                    )
+                }
+            }
+        }
+        .frame(width: canvasSize.width, height: canvasSize.height)
+    }
+
+    private func orbTapGesture(in pageSize: CGSize) -> some Gesture {
+        SpatialTapGesture(coordinateSpace: .local)
+            .onEnded { value in
+                scene.togglePause(at: value.location, pageSize: pageSize)
+            }
+    }
+
+    private func orbDragGesture(in pageSize: CGSize, minimumDistance: CGFloat = 0) -> some Gesture {
+        DragGesture(minimumDistance: minimumDistance, coordinateSpace: .local)
+            .onChanged { value in
+                if scene.drag == nil {
+                    scene.beginDrag(at: value.startLocation, pageSize: pageSize)
+                }
+                guard scene.drag != nil else {
+                    return
+                }
+                scene.updateDrag(at: value.location)
+            }
+            .onEnded { value in
+                scene.endDrag(at: value.location)
+            }
     }
 
     private func drawBackground(in context: inout GraphicsContext, size: CGSize) {
@@ -443,7 +578,11 @@ struct OrbEditorialView: View {
         ))
     }
 
-    private func drawPullquote(_ pullquote: OrbEditorialPullquoteBlock, in context: inout GraphicsContext) {
+    private func drawPullquote(
+        _ pullquote: OrbEditorialPullquoteBlock,
+        fontSize: Double,
+        in context: inout GraphicsContext
+    ) {
         let borderRect = CGRect(
             x: pullquote.rect.x,
             y: pullquote.rect.y,
@@ -456,7 +595,7 @@ struct OrbEditorialView: View {
             drawTextLine(
                 line,
                 in: &context,
-                font: OrbEditorialMetrics.pullquoteFontDescriptor.makeDisplayFont(),
+                font: OrbEditorialMetrics.pullquoteFontDescriptor(size: fontSize).makeDisplayFont(),
                 color: OrbEditorialPalette.pullquoteText
             )
         }
@@ -485,12 +624,3 @@ struct OrbEditorialView: View {
         )
     }
 }
-#else
-import SwiftUI
-
-struct OrbEditorialView: View {
-    var body: some View {
-        Color.clear
-    }
-}
-#endif

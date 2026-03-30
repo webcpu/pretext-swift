@@ -36,6 +36,7 @@ public final class TextMeasurer: @unchecked Sendable {
 
     private var metricsCache: [FontCacheKey: MetricsTable] = [:]
     private var widthCache: [FontCacheKey: WidthTable] = [:]
+    private let lock = NSRecursiveLock()
 
     // Reusable buffers to avoid per-call allocations
     private var glyphBuffer: [CGGlyph] = []
@@ -45,8 +46,10 @@ public final class TextMeasurer: @unchecked Sendable {
     private init() {}
 
     public func clearCache() {
-        metricsCache.removeAll()
-        widthCache.removeAll()
+        withLock {
+            metricsCache.removeAll()
+            widthCache.removeAll()
+        }
     }
 
     /// Fast path: sum glyph advances directly without creating CTLine.
@@ -89,108 +92,116 @@ public final class TextMeasurer: @unchecked Sendable {
     }
 
     public func measureSegment(_ text: String, font: CTFont) -> Double {
-        measureWithGlyphAdvances(text, font: font) ?? measureWithCTLine(text, font: font)
+        withLock {
+            measureWithGlyphAdvances(text, font: font) ?? measureWithCTLine(text, font: font)
+        }
     }
 
     private func segmentMetrics(for text: String, font: CTFont, fontKey: FontCacheKey) -> SegmentMetrics {
-        let table = metricsCache[fontKey] ?? {
-            let t = MetricsTable()
-            metricsCache[fontKey] = t
-            return t
-        }()
-        if let existing = table.metrics[text] { return existing }
+        withLock {
+            let table = metricsCache[fontKey] ?? {
+                let t = MetricsTable()
+                metricsCache[fontKey] = t
+                return t
+            }()
+            if let existing = table.metrics[text] { return existing }
 
-        let width: Double
-        let wt = widthCache[fontKey]
-        if let w = wt?.widths[text] {
-            width = w
-        } else {
-            width = measureSegment(text, font: font)
-            ensureWidthTable(fontKey).widths[text] = width
+            let width: Double
+            let wt = widthCache[fontKey]
+            if let w = wt?.widths[text] {
+                width = w
+            } else {
+                width = measureSegment(text, font: font)
+                ensureWidthTable(fontKey).widths[text] = width
+            }
+
+            let metrics = SegmentMetrics(
+                width: width,
+                containsCJK: containsCJK(text),
+                graphemeWidths: nil,
+                graphemePrefixWidths: nil
+            )
+            table.metrics[text] = metrics
+            return metrics
         }
-
-        let metrics = SegmentMetrics(
-            width: width,
-            containsCJK: containsCJK(text),
-            graphemeWidths: nil,
-            graphemePrefixWidths: nil
-        )
-        table.metrics[text] = metrics
-        return metrics
     }
 
     /// Batch measure all segment widths. Uses reference-type cache tables
     /// to avoid dictionary COW copies on every text.
     public func batchMeasureWidths(for segments: [String], in text: String, font: CTFont) -> [Double] {
-        guard !segments.isEmpty else { return [] }
+        withLock {
+            guard !segments.isEmpty else { return [] }
 
-        let fontKey = FontCacheKey(font)
-        let table = ensureWidthTable(fontKey)
-        var widths = [Double](repeating: 0, count: segments.count)
-        var attrStr: NSAttributedString?
-        var typesetter: CTTypesetter?
+            let fontKey = FontCacheKey(font)
+            let table = ensureWidthTable(fontKey)
+            var widths = [Double](repeating: 0, count: segments.count)
+            var attrStr: NSAttributedString?
+            var typesetter: CTTypesetter?
 
-        var utf16Location = 0
-        for index in segments.indices {
-            let segment = segments[index]
+            var utf16Location = 0
+            for index in segments.indices {
+                let segment = segments[index]
 
-            // Direct reference-type lookup — no COW copy
-            if let existing = table.widths[segment] {
-                widths[index] = existing
-                utf16Location += segment.utf16.count
-                continue
-            }
-
-            let utf16Length = segment.utf16.count
-            let width: Double
-            if let fast = measureWithGlyphAdvances(segment, font: font) {
-                width = fast
-            } else {
-                if attrStr == nil {
-                    attrStr = NSAttributedString(string: text, attributes: [
-                        NSAttributedString.Key(kCTFontAttributeName as String): font,
-                    ])
-                    typesetter = CTTypesetterCreateWithAttributedString(attrStr!)
+                // Direct reference-type lookup — no COW copy
+                if let existing = table.widths[segment] {
+                    widths[index] = existing
+                    utf16Location += segment.utf16.count
+                    continue
                 }
-                let line = CTTypesetterCreateLine(
-                    typesetter!,
-                    CFRange(location: utf16Location, length: utf16Length)
-                )
-                width = CTLineGetTypographicBounds(line, nil, nil, nil)
-            }
-            table.widths[segment] = width
-            widths[index] = width
-            utf16Location += utf16Length
-        }
 
-        return widths
+                let utf16Length = segment.utf16.count
+                let width: Double
+                if let fast = measureWithGlyphAdvances(segment, font: font) {
+                    width = fast
+                } else {
+                    if attrStr == nil {
+                        attrStr = NSAttributedString(string: text, attributes: [
+                            NSAttributedString.Key(kCTFontAttributeName as String): font,
+                        ])
+                        typesetter = CTTypesetterCreateWithAttributedString(attrStr!)
+                    }
+                    let line = CTTypesetterCreateLine(
+                        typesetter!,
+                        CFRange(location: utf16Location, length: utf16Length)
+                    )
+                    width = CTLineGetTypographicBounds(line, nil, nil, nil)
+                }
+                table.widths[segment] = width
+                widths[index] = width
+                utf16Location += utf16Length
+            }
+
+            return widths
+        }
     }
 
     public func graphemeWidths(for text: String, font: CTFont) -> [Double]? {
-        let fontKey = FontCacheKey(font)
-        let table = metricsCache[fontKey] ?? {
-            let t = MetricsTable()
-            metricsCache[fontKey] = t
-            return t
-        }()
-        var metrics = table.metrics[text] ?? segmentMetrics(for: text, font: font, fontKey: fontKey)
-        if let cached = metrics.graphemeWidths { return cached }
+        withLock {
+            let fontKey = FontCacheKey(font)
+            let table = metricsCache[fontKey] ?? {
+                let t = MetricsTable()
+                metricsCache[fontKey] = t
+                return t
+            }()
+            var metrics = table.metrics[text] ?? segmentMetrics(for: text, font: font, fontKey: fontKey)
+            if let cached = metrics.graphemeWidths { return cached }
 
-        let graphemes = text.graphemeStrings
-        guard graphemes.count > 1 else {
-            metrics.graphemeWidths = nil
+            let graphemes = text.graphemeStrings
+            guard graphemes.count > 1 else {
+                metrics.graphemeWidths = nil
+                table.metrics[text] = metrics
+                return nil
+            }
+
+            // Batch: if all graphemes are single UTF-16 units, one CTFont call
+            if let batch = batchGraphemeAdvances(graphemes, font: font) {
+                metrics.graphemeWidths = batch
+            } else {
+                metrics.graphemeWidths = graphemes.map { measureSegment($0, font: font) }
+            }
             table.metrics[text] = metrics
-            return nil
+            return metrics.graphemeWidths
         }
-
-        // Batch: if all graphemes are single UTF-16 units, one CTFont call
-        if let batch = batchGraphemeAdvances(graphemes, font: font) {
-            metrics.graphemeWidths = batch
-        } else {
-            metrics.graphemeWidths = graphemes.map { measureSegment($0, font: font) }
-        }
-        table.metrics[text] = metrics
-        return metrics.graphemeWidths
     }
 
     private func batchGraphemeAdvances(_ graphemes: [String], font: CTFont) -> [Double]? {
@@ -211,32 +222,34 @@ public final class TextMeasurer: @unchecked Sendable {
     }
 
     public func graphemePrefixWidths(for text: String, font: CTFont) -> [Double]? {
-        let fontKey = FontCacheKey(font)
-        let table = metricsCache[fontKey] ?? {
-            let t = MetricsTable()
-            metricsCache[fontKey] = t
-            return t
-        }()
-        var metrics = table.metrics[text] ?? segmentMetrics(for: text, font: font, fontKey: fontKey)
-        if let cached = metrics.graphemePrefixWidths { return cached }
+        withLock {
+            let fontKey = FontCacheKey(font)
+            let table = metricsCache[fontKey] ?? {
+                let t = MetricsTable()
+                metricsCache[fontKey] = t
+                return t
+            }()
+            var metrics = table.metrics[text] ?? segmentMetrics(for: text, font: font, fontKey: fontKey)
+            if let cached = metrics.graphemePrefixWidths { return cached }
 
-        let graphemes = text.graphemeStrings
-        guard graphemes.count > 1 else {
-            metrics.graphemePrefixWidths = nil
+            let graphemes = text.graphemeStrings
+            guard graphemes.count > 1 else {
+                metrics.graphemePrefixWidths = nil
+                table.metrics[text] = metrics
+                return nil
+            }
+
+            var prefix = ""
+            var widths: [Double] = []
+            widths.reserveCapacity(graphemes.count)
+            for grapheme in graphemes {
+                prefix += grapheme
+                widths.append(measureSegment(prefix, font: font))
+            }
+            metrics.graphemePrefixWidths = widths
             table.metrics[text] = metrics
-            return nil
+            return metrics.graphemePrefixWidths
         }
-
-        var prefix = ""
-        var widths: [Double] = []
-        widths.reserveCapacity(graphemes.count)
-        for grapheme in graphemes {
-            prefix += grapheme
-            widths.append(measureSegment(prefix, font: font))
-        }
-        metrics.graphemePrefixWidths = widths
-        table.metrics[text] = metrics
-        return metrics.graphemePrefixWidths
     }
 
     private func ensureWidthTable(_ fontKey: FontCacheKey) -> WidthTable {
@@ -244,6 +257,12 @@ public final class TextMeasurer: @unchecked Sendable {
         let table = WidthTable()
         widthCache[fontKey] = table
         return table
+    }
+
+    private func withLock<T>(_ body: () -> T) -> T {
+        lock.lock()
+        defer { lock.unlock() }
+        return body()
     }
 }
 

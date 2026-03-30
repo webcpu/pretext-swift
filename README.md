@@ -18,7 +18,8 @@ The hot `layout()` path is pure arithmetic. Measurement happens once in `prepare
 
 - `Pretext` supports `iOS 18+` and `macOS 15+`
 - `PretextUI` provides the optional `SwiftUI.Font` bridge on those same platforms
-- `Demo` and `Benchmark` remain macOS-only showcase apps in this repository
+- `Demo` supports `iPhone`, `iPad`, and `macOS` in this repository
+- `Benchmark` remains a macOS-only showcase app
 
 ## Build & Run
 
@@ -28,6 +29,12 @@ rake build
 
 # Validate the Pretext library for iOS Simulator
 rake build_ios_pretext
+
+# Build the demo app for iPhone and iPad simulators
+rake build_ios_demo
+
+# Run iOS demo tests
+rake test_ios_demo
 
 # Launch the demo app
 rake demo
@@ -43,7 +50,7 @@ Requires Xcode with iOS 18 / macOS 15 SDK support and Swift 6.0+.
 
 ## Demo
 
-The macOS demo app includes:
+The demo app includes:
 
 - `Situational Awareness`: light editorial layout with obstacle-aware text flow
 - `Editorial Engine`: dark multi-column editorial layout with animated orb obstacles

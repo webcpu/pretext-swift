@@ -1,12 +1,16 @@
 require "json"
 
-def ios_pretext_test_destination
+def ios_simulator_destination(name_prefix)
   devices = JSON.parse(`xcrun simctl list devices available --json`).fetch("devices").values.flatten
-  iphone = devices.find { |device| device["isAvailable"] && device["name"].start_with?("iPhone") }
+  device = devices.find { |entry| entry["isAvailable"] && entry["name"].start_with?(name_prefix) }
 
-  raise "No available iPhone simulator found" unless iphone
+  raise "No available #{name_prefix} simulator found" unless device
 
-  "platform=iOS Simulator,id=#{iphone.fetch("udid")}"
+  "platform=iOS Simulator,id=#{device.fetch("udid")}"
+end
+
+def ios_pretext_test_destination
+  ios_simulator_destination("iPhone")
 end
 
 desc "Debug build (all targets)"
@@ -19,9 +23,20 @@ task :build_ios_pretext do
   sh "xcodebuild -scheme Pretext -destination 'generic/platform=iOS Simulator' build CODE_SIGNING_ALLOWED=NO"
 end
 
+desc "Build the Demo app for iPhone and iPad simulators"
+task :build_ios_demo do
+  sh "xcodebuild build -scheme Demo -destination '#{ios_simulator_destination("iPhone")}' CODE_SIGNING_ALLOWED=NO"
+  sh "xcodebuild build -scheme Demo -destination '#{ios_simulator_destination("iPad")}' CODE_SIGNING_ALLOWED=NO"
+end
+
 desc "Run PretextTests on an iOS Simulator"
 task :test_ios_pretext do
   sh "xcodebuild test -scheme PretextSwift-Package -destination '#{ios_pretext_test_destination}' -only-testing:PretextTests CODE_SIGNING_ALLOWED=NO"
+end
+
+desc "Run DemoTests on an iOS Simulator"
+task :test_ios_demo do
+  sh "xcodebuild test -scheme PretextSwift-Package -destination '#{ios_simulator_destination("iPhone")}' -only-testing:DemoTests CODE_SIGNING_ALLOWED=NO"
 end
 
 desc "Release build"

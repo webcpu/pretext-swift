@@ -7,7 +7,7 @@ Native Swift port of [Pretext](https://github.com/chenglou/pretext) — a text l
 Four targets:
 - **Pretext** — reusable library (core engine)
 - **PretextUI** — optional SwiftUI bridge for `FontDescriptor.makeDisplayFont()`
-- **Demo** — macOS demo app
+- **Demo** — SwiftUI demo app for iOS + macOS
 - **Benchmark** — macOS benchmark app (GUI + CLI)
 
 ### Commands
@@ -16,6 +16,8 @@ Four targets:
 - `swift build -c release` — release build (10x faster, use for benchmarks)
 - `swift test` — run all tests (PretextTests + DemoTests)
 - `xcodebuild -scheme Pretext -destination 'generic/platform=iOS Simulator' build CODE_SIGNING_ALLOWED=NO` — validate the `Pretext` library on iOS Simulator
+- `xcodebuild build -scheme Demo -destination 'platform=iOS Simulator,id=…' CODE_SIGNING_ALLOWED=NO` — build the demo app on iOS Simulator
+- `xcodebuild test -scheme PretextSwift-Package -destination 'platform=iOS Simulator,id=…' -only-testing:DemoTests CODE_SIGNING_ALLOWED=NO` — run `DemoTests` on iOS Simulator
 - `swift run Demo` — launch the demo app
 - `swift run Benchmark` — launch the benchmark GUI
 - `.build/release/Benchmark --cli` — CLI benchmark (Pretext vs Core Text vs SwiftUI)
@@ -66,7 +68,8 @@ Pretext is **6.5x faster** than Core Text, **20x faster** than SwiftUI. The hot-
 
 - `Pretext` supports `iOS 18+` and `macOS 15+`
 - `PretextUI` is optional and only provides the SwiftUI display-font helper
-- `Demo` and `Benchmark` are maintained as macOS-only repo apps
+- `Demo` is maintained as an iOS + macOS repo app
+- `Benchmark` remains macOS-only
 
 ### Key design decisions
 

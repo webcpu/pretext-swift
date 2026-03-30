@@ -42,13 +42,18 @@ private let orbDefinitions: [OrbDefinition] = [
     OrbDefinition(fx: 0.86, fy: 0.18, radius: 65, vx: -13, vy: 19, color: RGBColor(red: 150 / 255, green: 100 / 255, blue: 220 / 255)),
 ]
 
+private func orbRadiusScale(for pageSize: CGSize) -> Double {
+    min(pageSize.width, pageSize.height) <= 640 ? (2.0 / 3.0) : 1.0
+}
+
 func makeInitialOrbStates(pageSize: CGSize) -> [OrbState] {
-    orbDefinitions.enumerated().map { index, definition in
+    let radiusScale = orbRadiusScale(for: pageSize)
+    return orbDefinitions.enumerated().map { index, definition in
         OrbState(
             id: index,
             x: definition.fx * pageSize.width,
             y: definition.fy * pageSize.height,
-            radius: definition.radius,
+            radius: definition.radius * radiusScale,
             vx: definition.vx,
             vy: definition.vy,
             color: definition.color

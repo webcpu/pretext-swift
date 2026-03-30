@@ -114,6 +114,8 @@ struct EvaluatedLayout {
     var leftLines: [PositionedLine]
     var rightLines: [PositionedLine]
     var contentHeight: Double
+    var openaiRect: WrapRect
+    var claudeRect: WrapRect
     var hits: LogoHits
 }
 
@@ -154,9 +156,9 @@ func buildLayout(pageWidth: Double, pageHeight: Double, lineHeight: Double) -> P
         let headlineFontSize = min(48, fitHeadlineFontSize(headlineWidth: headlineWidth, pageWidth: pageWidth))
         let headlineLineHeight = (headlineFontSize * 0.92).rounded()
         let creditGap = max(12, lineHeight * 0.5).rounded()
-        let copyGap = max(18, lineHeight * 0.7).rounded()
-        let claudeSize = min(92, pageWidth * 0.23, pageHeight * 0.11).rounded()
-        let openaiSize = min(138, pageWidth * 0.34).rounded()
+        let copyGap = max(34, lineHeight * 1.1).rounded()
+        let claudeSize = min(124, pageWidth * 0.31, pageHeight * 0.15).rounded()
+        let openaiSize = min(168, pageWidth * 0.42).rounded()
 
         return PageLayout(
             isNarrow: true,
@@ -184,7 +186,7 @@ func buildLayout(pageWidth: Double, pageHeight: Double, lineHeight: Double) -> P
             ),
             claudeRect: WrapRect(
                 x: pageWidth - gutter - (claudeSize * 0.88).rounded(),
-                y: 4,
+                y: headlineTop + headlineLineHeight + 8,
                 width: claudeSize,
                 height: claudeSize
             )
@@ -346,7 +348,7 @@ func evaluateLayout(
     openaiAngle: Double,
     claudeAngle: Double
 ) -> EvaluatedLayout {
-    let projection = logoProjection(
+    let initialProjection = logoProjection(
         layout: layout,
         lineHeight: lineHeight,
         openaiLogo: openaiLogo,
@@ -361,7 +363,7 @@ func evaluateLayout(
         startCursor: .start,
         region: layout.headlineRegion,
         lineHeight: layout.headlineLineHeight,
-        obstacles: [projection.openaiObstacle],
+        obstacles: [initialProjection.openaiObstacle],
         side: .left
     )
 
@@ -385,6 +387,16 @@ func evaluateLayout(
         height: EditorialMetrics.creditLineHeight
     )
     let copyTop = creditTop + EditorialMetrics.creditLineHeight + layout.copyGap
+    let resolvedClaudeRect = resolvedClaudeRect(layout: layout, headlineBottom: headlineBottom)
+    let projection = logoProjection(
+        lineHeight: lineHeight,
+        openaiLogo: openaiLogo,
+        claudeLogo: claudeLogo,
+        openaiRect: layout.openaiRect,
+        claudeRect: resolvedClaudeRect,
+        openaiAngle: openaiAngle,
+        claudeAngle: claudeAngle
+    )
     let titleObstacle = BandObstacle.rects(
         rects: headlineRects,
         horizontalPadding: (lineHeight * 0.95).rounded(),
@@ -429,6 +441,8 @@ func evaluateLayout(
             leftLines: bodyResult.lines,
             rightLines: [],
             contentHeight: layout.pageHeight,
+            openaiRect: layout.openaiRect,
+            claudeRect: resolvedClaudeRect,
             hits: projection.hits
         )
     }
@@ -472,6 +486,8 @@ func evaluateLayout(
         leftLines: leftResult.lines,
         rightLines: rightResult.lines,
         contentHeight: layout.pageHeight,
+        openaiRect: layout.openaiRect,
+        claudeRect: layout.claudeRect,
         hits: projection.hits
     )
 }
@@ -533,8 +549,32 @@ private func logoProjection(
     claudeObstacle: BandObstacle,
     hits: LogoHits
 ) {
-    let openaiWrap = transformWrapPoints(openaiLogo.layoutHull, rect: layout.openaiRect, angle: openaiAngle)
-    let claudeWrap = transformWrapPoints(claudeLogo.layoutHull, rect: layout.claudeRect, angle: claudeAngle)
+    logoProjection(
+        lineHeight: lineHeight,
+        openaiLogo: openaiLogo,
+        claudeLogo: claudeLogo,
+        openaiRect: layout.openaiRect,
+        claudeRect: layout.claudeRect,
+        openaiAngle: openaiAngle,
+        claudeAngle: claudeAngle
+    )
+}
+
+private func logoProjection(
+    lineHeight: Double,
+    openaiLogo: LoadedLogo,
+    claudeLogo: LoadedLogo,
+    openaiRect: WrapRect,
+    claudeRect: WrapRect,
+    openaiAngle: Double,
+    claudeAngle: Double
+) -> (
+    openaiObstacle: BandObstacle,
+    claudeObstacle: BandObstacle,
+    hits: LogoHits
+) {
+    let openaiWrap = transformWrapPoints(openaiLogo.layoutHull, rect: openaiRect, angle: openaiAngle)
+    let claudeWrap = transformWrapPoints(claudeLogo.layoutHull, rect: claudeRect, angle: claudeAngle)
 
     return (
         openaiObstacle: .polygon(
@@ -548,8 +588,21 @@ private func logoProjection(
             verticalPadding: (lineHeight * 0.12).rounded()
         ),
         hits: LogoHits(
-            openai: transformWrapPoints(openaiLogo.hitHull, rect: layout.openaiRect, angle: openaiAngle),
-            claude: transformWrapPoints(claudeLogo.hitHull, rect: layout.claudeRect, angle: claudeAngle)
+            openai: transformWrapPoints(openaiLogo.hitHull, rect: openaiRect, angle: openaiAngle),
+            claude: transformWrapPoints(claudeLogo.hitHull, rect: claudeRect, angle: claudeAngle)
         )
+    )
+}
+
+private func resolvedClaudeRect(layout: PageLayout, headlineBottom: Double) -> WrapRect {
+    guard layout.isNarrow else {
+        return layout.claudeRect
+    }
+
+    return WrapRect(
+        x: layout.claudeRect.x,
+        y: headlineBottom + 8,
+        width: layout.claudeRect.width,
+        height: layout.claudeRect.height
     )
 }

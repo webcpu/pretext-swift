@@ -3,39 +3,69 @@ import Foundation
 import Pretext
 
 enum OrbEditorialMetrics {
-    static let gutter = 48.0
-    static let columnGap = 40.0
     static let statsBarHeight = 42.0
-    static let dropCapLines = 3
     static let minSlotWidth = 50.0
     static let maxContentWidth = 1500.0
-    static let bodyLineHeight = 30.0
-    static let pullquoteLineHeight = 27.0
     static let circleHorizontalPadding = 14.0
     static let circleVerticalPadding = 4.0
-    static let bodyTopGap = 20.0
-    static let bodyBottomInset = 8.0
-    static let headlineLineHeightScale = 0.93
-    static let headlineMinSize = 24
-    static let headlineMaxSize = 120
-    static let dropCapSize = bodyLineHeight * Double(dropCapLines) - 4
-
-    static let bodyFontDescriptor = FontDescriptor(
-        familyName: "Iowan Old Style",
-        size: 18
+    static let regularProfile = OrbEditorialLayoutProfile(
+        cacheKey: "regular",
+        gutter: 48,
+        columnGap: 40,
+        dropCapLines: 3,
+        bodyLineHeight: 30,
+        pullquoteLineHeight: 27,
+        bodyTopGap: 20,
+        bodyBottomInset: 8,
+        headlineLineHeightScale: 0.93,
+        headlineMinSize: 24,
+        headlineMaxSize: 120,
+        headlineMaxHeightFraction: 0.35,
+        bodyFontSize: 18,
+        pullquoteFontSize: 19
     )
-    static let pullquoteFontDescriptor = FontDescriptor(
-        familyName: "Iowan Old Style",
-        size: 19,
-        symbolicTraits: .traitItalic
+    static let compactProfile = OrbEditorialLayoutProfile(
+        cacheKey: "compact",
+        gutter: 32,
+        columnGap: 32,
+        dropCapLines: 2,
+        bodyLineHeight: 23,
+        pullquoteLineHeight: 21,
+        bodyTopGap: 12,
+        bodyBottomInset: 8,
+        headlineLineHeightScale: 0.93,
+        headlineMinSize: 18,
+        headlineMaxSize: 60,
+        headlineMaxHeightFraction: 0.19,
+        bodyFontSize: 15,
+        pullquoteFontSize: 16
     )
 
-    static func bodyFont() -> CTFont {
-        bodyFontDescriptor.makeCTFont()
+    static func profile(for pageWidth: Double) -> OrbEditorialLayoutProfile {
+        pageWidth <= 640 ? compactProfile : regularProfile
     }
 
-    static func pullquoteFont() -> CTFont {
-        pullquoteFontDescriptor.makeCTFont()
+    static func bodyFontDescriptor(size: Double) -> FontDescriptor {
+        FontDescriptor(
+            familyName: "Iowan Old Style",
+            size: size
+        )
+    }
+
+    static func pullquoteFontDescriptor(size: Double) -> FontDescriptor {
+        FontDescriptor(
+            familyName: "Iowan Old Style",
+            size: size,
+            symbolicTraits: .traitItalic
+        )
+    }
+
+    static func bodyFont(size: Double) -> CTFont {
+        bodyFontDescriptor(size: size).makeCTFont()
+    }
+
+    static func pullquoteFont(size: Double) -> CTFont {
+        pullquoteFontDescriptor(size: size).makeCTFont()
     }
 
     static func headlineFont(size: Double) -> CTFont {
@@ -48,14 +78,35 @@ enum OrbEditorialMetrics {
         .makeCTFont()
     }
 
-    static func dropCapFont() -> CTFont {
+    static func dropCapFont(size: Double) -> CTFont {
         FontDescriptor(
             familyName: "Iowan Old Style",
-            size: dropCapSize,
+            size: size,
             symbolicTraits: .traitBold,
             weightValue: 0.4
         )
         .makeCTFont()
+    }
+}
+
+struct OrbEditorialLayoutProfile: Hashable {
+    var cacheKey: String
+    var gutter: Double
+    var columnGap: Double
+    var dropCapLines: Int
+    var bodyLineHeight: Double
+    var pullquoteLineHeight: Double
+    var bodyTopGap: Double
+    var bodyBottomInset: Double
+    var headlineLineHeightScale: Double
+    var headlineMinSize: Int
+    var headlineMaxSize: Int
+    var headlineMaxHeightFraction: Double
+    var bodyFontSize: Double
+    var pullquoteFontSize: Double
+
+    var dropCapSize: Double {
+        bodyLineHeight * Double(dropCapLines) - 4
     }
 }
 
@@ -69,11 +120,18 @@ struct OrbEditorialSnapshot: Equatable {
     var headlineLines: [PositionedLine]
     var headlineFontSize: Double
     var headlineLineHeight: Double
+    var bodyFontSize: Double
+    var bodyLineHeight: Double
+    var pullquoteFontSize: Double
+    var pullquoteLineHeight: Double
+    var dropCapSize: Double
     var bodyLines: [PositionedLine]
     var pullquotes: [OrbEditorialPullquoteBlock]
     var dropCapRect: WrapRect
     var dropCapPosition: WrapPoint
     var columnCount: Int
+    var contentBottom: Double
+    var bodyExhausted: Bool
     var reflowMilliseconds: Double
 }
 
@@ -98,17 +156,63 @@ private struct OrbPullquotePlacement {
 }
 
 private enum OrbEditorialAssets {
-    static let bodyPrepared = prepareWithSegments(OrbEditorialText.body, font: OrbEditorialMetrics.bodyFont())
-    static let pullquotePrepared = OrbEditorialText.pullquotes.map {
-        prepareWithSegments($0, font: OrbEditorialMetrics.pullquoteFont())
-    }
     static let bodyStartCursor = LayoutCursor(segmentIndex: 0, graphemeIndex: 1)
     static let dropCapCharacter = String(OrbEditorialText.body.prefix(1))
-    static let dropCapPrepared = prepareWithSegments(dropCapCharacter, font: OrbEditorialMetrics.dropCapFont())
-    static let dropCapTotalWidth = ceil(singleLineWidth(dropCapPrepared)) + 10
 
+    nonisolated(unsafe) private static var bodyPreparedCache: [String: PreparedText] = [:]
+    nonisolated(unsafe) private static var pullquotePreparedCache: [String: [PreparedText]] = [:]
+    nonisolated(unsafe) private static var dropCapPreparedCache: [String: PreparedText] = [:]
+    nonisolated(unsafe) private static var dropCapTotalWidthCache: [String: Double] = [:]
     nonisolated(unsafe) private static var headlinePreparedCache: [Int: PreparedText] = [:]
     nonisolated(unsafe) private static var fittedHeadlineCache: [String: (fontSize: Double, lineHeight: Double, lines: [PositionedLine])] = [:]
+
+    static func preparedBody(for profile: OrbEditorialLayoutProfile) -> PreparedText {
+        if let cached = bodyPreparedCache[profile.cacheKey] {
+            return cached
+        }
+
+        let prepared = prepareWithSegments(
+            OrbEditorialText.body,
+            font: OrbEditorialMetrics.bodyFont(size: profile.bodyFontSize)
+        )
+        bodyPreparedCache[profile.cacheKey] = prepared
+        return prepared
+    }
+
+    static func preparedPullquotes(for profile: OrbEditorialLayoutProfile) -> [PreparedText] {
+        if let cached = pullquotePreparedCache[profile.cacheKey] {
+            return cached
+        }
+
+        let prepared = OrbEditorialText.pullquotes.map {
+            prepareWithSegments($0, font: OrbEditorialMetrics.pullquoteFont(size: profile.pullquoteFontSize))
+        }
+        pullquotePreparedCache[profile.cacheKey] = prepared
+        return prepared
+    }
+
+    static func dropCapPrepared(for profile: OrbEditorialLayoutProfile) -> PreparedText {
+        if let cached = dropCapPreparedCache[profile.cacheKey] {
+            return cached
+        }
+
+        let prepared = prepareWithSegments(
+            dropCapCharacter,
+            font: OrbEditorialMetrics.dropCapFont(size: profile.dropCapSize)
+        )
+        dropCapPreparedCache[profile.cacheKey] = prepared
+        return prepared
+    }
+
+    static func dropCapTotalWidth(for profile: OrbEditorialLayoutProfile) -> Double {
+        if let cached = dropCapTotalWidthCache[profile.cacheKey] {
+            return cached
+        }
+
+        let width = ceil(singleLineWidth(dropCapPrepared(for: profile))) + 10
+        dropCapTotalWidthCache[profile.cacheKey] = width
+        return width
+    }
 
     static func preparedHeadline(size: Int) -> PreparedText {
         if let cached = headlinePreparedCache[size] {
@@ -121,22 +225,28 @@ private enum OrbEditorialAssets {
     }
 
     static func cachedHeadline(
+        profile: OrbEditorialLayoutProfile,
         maxWidth: Double,
         maxHeight: Double
     ) -> (fontSize: Double, lineHeight: Double, lines: [PositionedLine])? {
-        fittedHeadlineCache[headlineCacheKey(maxWidth: maxWidth, maxHeight: maxHeight)]
+        fittedHeadlineCache[headlineCacheKey(profile: profile, maxWidth: maxWidth, maxHeight: maxHeight)]
     }
 
     static func storeHeadline(
+        profile: OrbEditorialLayoutProfile,
         maxWidth: Double,
         maxHeight: Double,
         value: (fontSize: Double, lineHeight: Double, lines: [PositionedLine])
     ) {
-        fittedHeadlineCache[headlineCacheKey(maxWidth: maxWidth, maxHeight: maxHeight)] = value
+        fittedHeadlineCache[headlineCacheKey(profile: profile, maxWidth: maxWidth, maxHeight: maxHeight)] = value
     }
 
-    private static func headlineCacheKey(maxWidth: Double, maxHeight: Double) -> String {
-        "\(maxWidth.rounded()):\(maxHeight.rounded())"
+    private static func headlineCacheKey(
+        profile: OrbEditorialLayoutProfile,
+        maxWidth: Double,
+        maxHeight: Double
+    ) -> String {
+        "\(profile.cacheKey):\(maxWidth.rounded()):\(maxHeight.rounded())"
     }
 }
 
@@ -153,13 +263,16 @@ func orbEditorialColumnCount(for width: Double) -> Int {
 func evaluateOrbEditorialLayout(
     pageWidth: Double,
     pageHeight: Double,
+    compositionHeight: Double? = nil,
     orbs: [OrbState]
 ) -> OrbEditorialSnapshot {
     let start = CFAbsoluteTimeGetCurrent()
-    let gutter = OrbEditorialMetrics.gutter
+    let profile = OrbEditorialMetrics.profile(for: pageWidth)
+    let gutter = profile.gutter
+    let resolvedCompositionHeight = min(max(compositionHeight ?? pageHeight, 1), pageHeight)
     let headlineWidth = min(pageWidth - gutter * 2, 1000)
-    let headlineMaxHeight = floor(pageHeight * 0.35)
-    let headline = fitOrbHeadline(maxWidth: headlineWidth, maxHeight: headlineMaxHeight)
+    let headlineMaxHeight = floor(resolvedCompositionHeight * profile.headlineMaxHeightFraction)
+    let headline = fitOrbHeadline(maxWidth: headlineWidth, maxHeight: headlineMaxHeight, profile: profile)
     let positionedHeadlineLines = headline.lines.map {
         PositionedLine(
             x: gutter + $0.x,
@@ -170,21 +283,25 @@ func evaluateOrbEditorialLayout(
     }
 
     let headlineHeight = Double(positionedHeadlineLines.count) * headline.lineHeight
-    let bodyTop = gutter + headlineHeight + OrbEditorialMetrics.bodyTopGap
-    let bodyHeight = max(0, pageHeight - bodyTop - OrbEditorialMetrics.statsBarHeight - OrbEditorialMetrics.bodyBottomInset)
+    let bodyTop = gutter + headlineHeight + profile.bodyTopGap
+    let compositionBodyHeight = max(
+        0,
+        resolvedCompositionHeight - bodyTop - OrbEditorialMetrics.statsBarHeight - profile.bodyBottomInset
+    )
+    let bodyHeight = max(0, pageHeight - bodyTop - OrbEditorialMetrics.statsBarHeight - profile.bodyBottomInset)
     let columnCount = orbEditorialColumnCount(for: pageWidth)
-    let totalGutter = gutter * 2 + OrbEditorialMetrics.columnGap * Double(columnCount - 1)
+    let totalGutter = gutter * 2 + profile.columnGap * Double(columnCount - 1)
     let contentWidth = min(pageWidth, OrbEditorialMetrics.maxContentWidth)
     let columnWidth = floor((contentWidth - totalGutter) / Double(columnCount))
     let contentLeft = round(
-        (pageWidth - (Double(columnCount) * columnWidth + Double(columnCount - 1) * OrbEditorialMetrics.columnGap)) / 2
+        (pageWidth - (Double(columnCount) * columnWidth + Double(columnCount - 1) * profile.columnGap)) / 2
     )
     let firstColumnX = contentLeft
     let dropCapRect = WrapRect(
         x: firstColumnX - 2,
         y: bodyTop - 2,
-        width: OrbEditorialAssets.dropCapTotalWidth,
-        height: Double(OrbEditorialMetrics.dropCapLines) * OrbEditorialMetrics.bodyLineHeight + 2
+        width: OrbEditorialAssets.dropCapTotalWidth(for: profile),
+        height: Double(profile.dropCapLines) * profile.bodyLineHeight + 2
     )
     let dropCapPosition = WrapPoint(x: firstColumnX, y: bodyTop)
 
@@ -210,20 +327,20 @@ func evaluateOrbEditorialLayout(
         }
 
         let pullquoteWidth = round(columnWidth * placement.widthFraction)
-        let columnX = contentLeft + Double(placement.columnIndex) * (columnWidth + OrbEditorialMetrics.columnGap)
+        let columnX = contentLeft + Double(placement.columnIndex) * (columnWidth + profile.columnGap)
         let pullquoteX = placement.side == .right ? columnX + columnWidth - pullquoteWidth : columnX
-        let pullquoteY = round(bodyTop + bodyHeight * placement.yFraction)
-        var prepared = OrbEditorialAssets.pullquotePrepared[index]
-        let layoutResult = layout(&prepared, maxWidth: pullquoteWidth - 20, lineHeight: OrbEditorialMetrics.pullquoteLineHeight)
+        let pullquoteY = round(bodyTop + compositionBodyHeight * placement.yFraction)
+        var prepared = OrbEditorialAssets.preparedPullquotes(for: profile)[index]
+        let layoutResult = layout(&prepared, maxWidth: pullquoteWidth - 20, lineHeight: profile.pullquoteLineHeight)
         let (_, rawLines) = layoutWithLines(
             &prepared,
             maxWidth: pullquoteWidth - 20,
-            lineHeight: OrbEditorialMetrics.pullquoteLineHeight
+            lineHeight: profile.pullquoteLineHeight
         )
         let positionedLines = rawLines.enumerated().map { lineIndex, line in
             PositionedLine(
                 x: pullquoteX + 20,
-                y: pullquoteY + 8 + Double(lineIndex) * OrbEditorialMetrics.pullquoteLineHeight,
+                y: pullquoteY + 8 + Double(lineIndex) * profile.pullquoteLineHeight,
                 width: line.width,
                 text: line.text
             )
@@ -244,9 +361,9 @@ func evaluateOrbEditorialLayout(
 
     var bodyLines: [PositionedLine] = []
     var cursor = OrbEditorialAssets.bodyStartCursor
-    var preparedBody = OrbEditorialAssets.bodyPrepared
+    var preparedBody = OrbEditorialAssets.preparedBody(for: profile)
     for columnIndex in 0..<columnCount {
-        let columnX = contentLeft + Double(columnIndex) * (columnWidth + OrbEditorialMetrics.columnGap)
+        let columnX = contentLeft + Double(columnIndex) * (columnWidth + profile.columnGap)
         var rectObstacles: [WrapRect] = []
         if columnIndex == 0 {
             rectObstacles.append(dropCapRect)
@@ -260,7 +377,7 @@ func evaluateOrbEditorialLayout(
             regionY: bodyTop,
             regionWidth: columnWidth,
             regionHeight: bodyHeight,
-            lineHeight: OrbEditorialMetrics.bodyLineHeight,
+            lineHeight: profile.bodyLineHeight,
             circleObstacles: circleObstacles,
             rectObstacles: rectObstacles
         )
@@ -268,34 +385,77 @@ func evaluateOrbEditorialLayout(
         cursor = result.cursor
     }
 
+    let bodyExhausted = layoutNextLine(preparedBody, start: cursor, maxWidth: columnWidth) == nil
+    let headlineBottom = positionedHeadlineLines.map { $0.y + headline.lineHeight }.max() ?? gutter
+    let bodyBottom = bodyLines.map { $0.y + profile.bodyLineHeight }.max() ?? bodyTop
+    let pullquoteBottom = pullquotes.map { $0.rect.y + $0.rect.height }.max() ?? 0
+    let contentBottom = max(headlineBottom, bodyBottom, pullquoteBottom, dropCapRect.y + dropCapRect.height)
     let reflowMilliseconds = (CFAbsoluteTimeGetCurrent() - start) * 1000
     return OrbEditorialSnapshot(
         headlineLines: positionedHeadlineLines,
         headlineFontSize: headline.fontSize,
         headlineLineHeight: headline.lineHeight,
+        bodyFontSize: profile.bodyFontSize,
+        bodyLineHeight: profile.bodyLineHeight,
+        pullquoteFontSize: profile.pullquoteFontSize,
+        pullquoteLineHeight: profile.pullquoteLineHeight,
+        dropCapSize: profile.dropCapSize,
         bodyLines: bodyLines,
         pullquotes: pullquotes,
         dropCapRect: dropCapRect,
         dropCapPosition: dropCapPosition,
         columnCount: columnCount,
+        contentBottom: contentBottom,
+        bodyExhausted: bodyExhausted,
         reflowMilliseconds: reflowMilliseconds
     )
 }
 
-private func fitOrbHeadline(maxWidth: Double, maxHeight: Double) -> (fontSize: Double, lineHeight: Double, lines: [PositionedLine]) {
-    if let cached = OrbEditorialAssets.cachedHeadline(maxWidth: maxWidth, maxHeight: maxHeight) {
+func orbEditorialPhoneContentHeight(
+    viewportWidth: Double,
+    viewportHeight: Double,
+    orbs: [OrbState]
+) -> Double {
+    let profile = OrbEditorialMetrics.profile(for: viewportWidth)
+    var pageHeight = max(viewportHeight * 2, 2000)
+
+    for _ in 0..<8 {
+        let snapshot = evaluateOrbEditorialLayout(
+            pageWidth: viewportWidth,
+            pageHeight: pageHeight,
+            compositionHeight: viewportHeight,
+            orbs: orbs
+        )
+        let paddedBottom = snapshot.contentBottom + OrbEditorialMetrics.statsBarHeight + profile.gutter
+
+        if snapshot.bodyExhausted {
+            return max(pageHeight, paddedBottom)
+        }
+
+        pageHeight = max(pageHeight * 1.5, paddedBottom + viewportHeight)
+    }
+
+    return pageHeight
+}
+
+private func fitOrbHeadline(
+    maxWidth: Double,
+    maxHeight: Double,
+    profile: OrbEditorialLayoutProfile
+) -> (fontSize: Double, lineHeight: Double, lines: [PositionedLine]) {
+    if let cached = OrbEditorialAssets.cachedHeadline(profile: profile, maxWidth: maxWidth, maxHeight: maxHeight) {
         return cached
     }
 
-    var low = OrbEditorialMetrics.headlineMinSize
-    var high = OrbEditorialMetrics.headlineMaxSize
+    var low = profile.headlineMinSize
+    var high = profile.headlineMaxSize
     var bestSize = low
-    var bestLineHeight = round(Double(low) * OrbEditorialMetrics.headlineLineHeightScale)
+    var bestLineHeight = round(Double(low) * profile.headlineLineHeightScale)
     var bestLines: [PositionedLine] = []
 
     while low <= high {
         let size = Int(floor(Double(low + high) / 2))
-        let lineHeight = round(Double(size) * OrbEditorialMetrics.headlineLineHeightScale)
+        let lineHeight = round(Double(size) * profile.headlineLineHeightScale)
         var prepared = OrbEditorialAssets.preparedHeadline(size: size)
         var lineCount = 0
         var breaksWord = false
@@ -331,7 +491,7 @@ private func fitOrbHeadline(maxWidth: Double, maxHeight: Double) -> (fontSize: D
         lineHeight: bestLineHeight,
         lines: bestLines
     )
-    OrbEditorialAssets.storeHeadline(maxWidth: maxWidth, maxHeight: maxHeight, value: result)
+    OrbEditorialAssets.storeHeadline(profile: profile, maxWidth: maxWidth, maxHeight: maxHeight, value: result)
     return result
 }
 

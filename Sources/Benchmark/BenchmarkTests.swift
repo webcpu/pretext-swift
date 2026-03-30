@@ -23,11 +23,11 @@ func runBatchPrepareAndLayout() -> BenchmarkResult {
         let msg = PrepareProfile.summary() + "\n" + AnalysisSubProfile.summary() + "\n"
         AnalysisSubProfile.reset()
         if let data = msg.data(using: .utf8) {
-            let handle = FileHandle(forWritingAtPath: "/tmp/pretext-profile.log")
-                ?? { FileManager.default.createFile(atPath: "/tmp/pretext-profile.log", contents: nil); return FileHandle(forWritingAtPath: "/tmp/pretext-profile.log")! }()
-            handle.seekToEndOfFile()
-            handle.write(data)
-            handle.closeFile()
+            if let handle = try? openBenchmarkProfileLogHandle() {
+                handle.seekToEndOfFile()
+                handle.write(data)
+                handle.closeFile()
+            }
         }
     }
 

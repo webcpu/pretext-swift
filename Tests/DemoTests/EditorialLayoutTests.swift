@@ -40,4 +40,33 @@ final class EditorialLayoutTests: XCTestCase {
 
         XCTAssertEqual(EditorialAssets.creditWidth, measuredWidth, accuracy: 0.001)
     }
+
+    func testNarrowLayoutUsesLargerPhoneLogoSizes() {
+        let layout = buildLayout(pageWidth: 390, pageHeight: 844, lineHeight: EditorialMetrics.bodyLineHeight)
+
+        XCTAssertGreaterThan(layout.openaiRect.width, 140)
+        XCTAssertGreaterThan(layout.claudeRect.width, 100)
+    }
+
+    func testEvaluateNarrowLayoutPlacesClaudeLogoBelowHeadline() {
+        let layout = buildLayout(pageWidth: 390, pageHeight: 844, lineHeight: EditorialMetrics.bodyLineHeight)
+        let evaluated = evaluateLayout(
+            layout: layout,
+            lineHeight: EditorialMetrics.bodyLineHeight,
+            preparedBody: EditorialAssets.bodyPrepared,
+            openaiLogo: EditorialAssets.openaiLogo,
+            claudeLogo: EditorialAssets.claudeLogo,
+            openaiAngle: 0,
+            claudeAngle: 0
+        )
+
+        let headlineBottom = evaluated.headlineLines.map { $0.y + layout.headlineLineHeight }.max() ?? layout.headlineRegion.y
+
+        XCTAssertGreaterThanOrEqual(evaluated.claudeRect.y, headlineBottom + 8)
+    }
+
+    func testEditorialInteractionHintUsesTapLanguageOnNarrowLayouts() {
+        XCTAssertEqual(editorialInteractionHintText(isNarrow: true), "Tap the logos to spin them.")
+        XCTAssertTrue(editorialInteractionHintText(isNarrow: false).contains("click the logos"))
+    }
 }

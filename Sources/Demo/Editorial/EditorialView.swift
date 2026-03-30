@@ -1,5 +1,3 @@
-#if os(macOS)
-import AppKit
 import Pretext
 import PretextUI
 import SwiftUI
@@ -39,6 +37,13 @@ private enum EditorialPalette {
     static let leftAtmosphereSecondary = Color(red: 57 / 255, green: 78 / 255, blue: 124 / 255)
 }
 
+func editorialInteractionHintText(isNarrow: Bool) -> String {
+    if isNarrow {
+        return "Tap the logos to spin them."
+    }
+    return "Everything laid out in Swift. Resize the window, then click the logos."
+}
+
 private struct HintPillView: View {
     private static let font = FontDescriptor(
         familyName: "Helvetica Neue",
@@ -48,7 +53,7 @@ private struct HintPillView: View {
     .makeDisplayFont()
 
     var body: some View {
-        Text("Everything laid out in Swift. Resize the window, then click the logos.")
+        Text(editorialInteractionHintText(isNarrow: false))
             .font(Self.font)
             .tracking(12 * 0.015)
             .foregroundStyle(EditorialPalette.hintText)
@@ -57,6 +62,23 @@ private struct HintPillView: View {
             .background(EditorialPalette.hintBackground)
             .clipShape(Capsule())
             .shadow(color: EditorialPalette.ink.opacity(0.16), radius: 32, x: 0, y: 14)
+            .allowsHitTesting(false)
+    }
+}
+
+private struct InlineHintView: View {
+    private static let font = FontDescriptor(
+        familyName: "Helvetica Neue",
+        size: 11,
+        weightValue: 0.18
+    )
+    .makeDisplayFont()
+
+    var body: some View {
+        Text(editorialInteractionHintText(isNarrow: true))
+            .font(Self.font)
+            .tracking(11 * 0.06)
+            .foregroundStyle(EditorialPalette.mutedInk)
             .allowsHitTesting(false)
     }
 }
@@ -137,7 +159,7 @@ private struct HeadlineLineView: View {
             .tracking(EditorialMetrics.headlineLetterSpacing)
             .foregroundStyle(EditorialPalette.ink)
             .textSelection(.enabled)
-            .modifier(HoverCursorModifier(cursor: .iBeam))
+            .demoPointerCursor(.iBeam)
             .frame(height: lineHeight, alignment: .topLeading)
             .offset(x: line.x, y: line.y)
             .zIndex(1)
@@ -155,7 +177,7 @@ private struct CreditLineView: View {
             .tracking(isNarrow ? EditorialMetrics.creditNarrowLetterSpacing : EditorialMetrics.creditLetterSpacing)
             .foregroundStyle(EditorialPalette.mutedInk)
             .textSelection(.enabled)
-            .modifier(HoverCursorModifier(cursor: .iBeam))
+            .demoPointerCursor(.iBeam)
             .offset(x: left, y: top)
             .zIndex(1)
     }
@@ -171,11 +193,11 @@ private struct BodyLineView: View {
             .tracking(EditorialMetrics.bodyLetterSpacing)
             .foregroundStyle(isHovered ? EditorialPalette.accent : EditorialPalette.ink)
             .textSelection(.enabled)
-            .modifier(HoverCursorModifier(cursor: .iBeam))
+            .demoPointerCursor(.iBeam)
             .frame(height: EditorialMetrics.bodyLineHeight, alignment: .topLeading)
             .offset(x: line.x, y: line.y)
             .animation(.easeInOut(duration: 0.12), value: isHovered)
-            .onHover { hovering in
+            .demoHoverState { hovering in
                 isHovered = hovering
             }
             .zIndex(1)
@@ -184,7 +206,7 @@ private struct BodyLineView: View {
 
 private struct LogoImageView: View {
     var kind: LogoKind
-    var image: NSImage
+    var image: DemoPlatformImage
     var rect: WrapRect
     var angle: Double
 
@@ -208,7 +230,7 @@ private struct LogoImageView: View {
     }
 
     private var logoImage: Image {
-        let image = Image(nsImage: image)
+        let image = Image(platformImage: image)
         if kind == .openai {
             return image.renderingMode(.template)
         }
@@ -216,68 +238,9 @@ private struct LogoImageView: View {
     }
 }
 
-private struct HoverCursorModifier: ViewModifier {
-    var cursor: NSCursor
-    @State private var isHovering = false
-
-    func body(content: Content) -> some View {
-        content
-            .onHover { hovering in
-                guard hovering != isHovering else {
-                    return
-                }
-
-                if hovering {
-                    cursor.push()
-                } else {
-                    NSCursor.pop()
-                }
-                isHovering = hovering
-            }
-            .onDisappear {
-                if isHovering {
-                    NSCursor.pop()
-                    isHovering = false
-                }
-            }
-    }
-}
-
-private struct ConditionalCursorModifier: ViewModifier {
-    var isActive: Bool
-    var cursor: NSCursor
-    @State private var isApplied = false
-
-    func body(content: Content) -> some View {
-        content
-            .onAppear {
-                syncCursor(shouldApply: isActive)
-            }
-            .onChange(of: isActive) { _, newValue in
-                syncCursor(shouldApply: newValue)
-            }
-            .onDisappear {
-                syncCursor(shouldApply: false)
-            }
-    }
-
-    private func syncCursor(shouldApply: Bool) {
-        guard shouldApply != isApplied else {
-            return
-        }
-
-        if shouldApply {
-            cursor.push()
-        } else {
-            NSCursor.pop()
-        }
-        isApplied = shouldApply
-    }
-}
-
 private extension View {
     func editorialLogoPointer(active: Bool) -> some View {
-        modifier(ConditionalCursorModifier(isActive: active, cursor: .pointingHand))
+        demoPointerCursor(active: active, cursor: .pointingHand)
     }
 }
 
@@ -336,7 +299,7 @@ struct EditorialView: View {
                     LogoImageView(
                         kind: .openai,
                         image: EditorialAssets.openaiLogo.image,
-                        rect: layout.openaiRect,
+                        rect: evaluated.openaiRect,
                         angle: snapshot.openaiAngle
                     )
                     .foregroundStyle(EditorialPalette.ink)
@@ -344,7 +307,7 @@ struct EditorialView: View {
                     LogoImageView(
                         kind: .claude,
                         image: EditorialAssets.claudeLogo.image,
-                        rect: layout.claudeRect,
+                        rect: evaluated.claudeRect,
                         angle: snapshot.claudeAngle
                     )
 
@@ -353,6 +316,13 @@ struct EditorialView: View {
                             .frame(maxWidth: .infinity, alignment: .center)
                             .padding(.top, 16)
                             .zIndex(5)
+                    } else {
+                        InlineHintView()
+                            .offset(
+                                x: evaluated.creditLeft,
+                                y: evaluated.creditTop + EditorialMetrics.creditLineHeight + 10
+                            )
+                            .zIndex(4)
                     }
                 }
                 .frame(width: proxy.size.width, height: proxy.size.height, alignment: .topLeading)
@@ -370,13 +340,8 @@ struct EditorialView: View {
                             )
                         }
                 )
-                .onContinuousHover(coordinateSpace: .local) { phase in
-                    switch phase {
-                    case let .active(location):
-                        hoverLocation = location
-                    case .ended:
-                        hoverLocation = nil
-                    }
+                .demoContinuousHover { location in
+                    hoverLocation = location
                 }
                 .background(EditorialPalette.paper)
                 .task(id: snapshot.animating) {
@@ -474,12 +439,3 @@ struct EditorialView: View {
         return 1 - oneMinusT * oneMinusT * oneMinusT
     }
 }
-#else
-import SwiftUI
-
-struct EditorialView: View {
-    var body: some View {
-        Color.clear
-    }
-}
-#endif

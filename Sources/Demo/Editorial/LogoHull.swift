@@ -1,15 +1,14 @@
 import Foundation
+import CoreGraphics
 
 #if os(macOS)
 import AppKit
-typealias PlatformImage = NSImage
 #elseif os(iOS)
 import UIKit
-typealias PlatformImage = UIImage
 #endif
 
 struct LoadedLogo {
-    var image: PlatformImage
+    var image: DemoPlatformImage
     var layoutHull: [WrapPoint]
     var hitHull: [WrapPoint]
 }
@@ -21,7 +20,7 @@ enum LogoHullError: Error {
 
 func loadBundledLogo(named resourceName: String, layoutSmoothRadius: Int, hitSmoothRadius: Int) -> LoadedLogo {
     do {
-        let image = try loadBundledSVGImage(named: resourceName)
+        let image = try loadBundledPlatformImage(named: resourceName)
         return LoadedLogo(
             image: image,
             layoutHull: makeWrapHull(from: image, smoothRadius: layoutSmoothRadius, mode: .mean),
@@ -39,7 +38,15 @@ func loadBundledLogo(named resourceName: String, layoutSmoothRadius: Int, hitSmo
     }
 }
 
-private func loadBundledSVGImage(named resourceName: String) throws -> PlatformImage {
+private func loadBundledPlatformImage(named resourceName: String) throws -> DemoPlatformImage {
+    #if os(macOS)
+    return try loadBundledSVGImage(named: resourceName)
+    #else
+    return try loadBundledRasterImage(named: resourceName)
+    #endif
+}
+
+private func loadBundledSVGImage(named resourceName: String) throws -> DemoPlatformImage {
     guard let url = Bundle.module.url(forResource: resourceName, withExtension: "svg") else {
         throw LogoHullError.missingResource(resourceName)
     }
@@ -59,7 +66,25 @@ private func loadBundledSVGImage(named resourceName: String) throws -> PlatformI
     #endif
 }
 
-func makeWrapHull(from image: PlatformImage, smoothRadius: Int, mode: WrapHullMode) -> [WrapPoint] {
+private func loadBundledRasterImage(named resourceName: String) throws -> DemoPlatformImage {
+    guard let url = Bundle.module.url(forResource: resourceName, withExtension: "png") else {
+        throw LogoHullError.missingResource(resourceName)
+    }
+
+    guard let image = DemoPlatformImage(contentsOfFile: url.path) else {
+        throw LogoHullError.invalidSVG("Unable to load \(resourceName).png")
+    }
+
+    #if os(iOS)
+    if resourceName == "openai-symbol" {
+        return image.withRenderingMode(.alwaysTemplate)
+    }
+    #endif
+
+    return image
+}
+
+func makeWrapHull(from image: DemoPlatformImage, smoothRadius: Int, mode: WrapHullMode) -> [WrapPoint] {
     let imageSize = image.size
     let aspect = max(0.1, imageSize.width / max(1, imageSize.height))
     let maxDimension = 320.0
@@ -201,7 +226,7 @@ func makeWrapHull(from image: PlatformImage, smoothRadius: Int, mode: WrapHullMo
     return points
 }
 
-private func platformCGImage(from image: PlatformImage) -> CGImage? {
+private func platformCGImage(from image: DemoPlatformImage) -> CGImage? {
     #if os(macOS)
     image.cgImage(forProposedRect: nil, context: nil, hints: nil)
     #else
@@ -209,7 +234,7 @@ private func platformCGImage(from image: PlatformImage) -> CGImage? {
     #endif
 }
 
-private func makeFallbackImage() -> PlatformImage {
+private func makeFallbackImage() -> DemoPlatformImage {
     let size = CGSize(width: 160, height: 160)
     #if os(macOS)
     let image = NSImage(size: size)

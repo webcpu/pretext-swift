@@ -4,6 +4,8 @@ import Pretext
 import PretextUI
 import SwiftUI
 
+private let chikaDanceVideoAspect = 1920.0 / 1080.0
+
 private final class VideoFrameProvider: @unchecked Sendable {
     private var player: AVPlayer?
     private var videoOutput: AVPlayerItemVideoOutput?
@@ -179,33 +181,46 @@ struct ChikaDanceView: View {
         pageWidth: Double,
         pageHeight: Double
     ) -> WrapRect {
-        guard let bounds = frame?.boundsFraction else {
-            return WrapRect(x: pageWidth * 0.3, y: 50, width: pageWidth * 0.4, height: pageHeight - 150)
-        }
-
-        // Scale character to half the page height, preserving aspect ratio
-        let videoAspect = bounds.width / bounds.height * (1920.0 / 1080.0)
-        let maxHeight = pageHeight - ChikaDanceMetrics.gutter - ChikaDanceMetrics.statsBarHeight - 16
-        let characterHeight = min(maxHeight, pageHeight * 0.5)
-        let characterWidth = min(characterHeight * videoAspect, pageWidth * 0.45)
-
-        // Map character's video-frame position to screen position
-        let videoCenterX = bounds.x + bounds.width / 2
-        let videoCenterY = bounds.y + bounds.height / 2
-        let screenX = videoCenterX * pageWidth - characterWidth / 2
-        let screenY = videoCenterY * pageHeight - characterHeight / 2
-
-        // Clamp to keep character on screen
-        let clampedX = max(0, min(screenX, pageWidth - characterWidth))
-        let clampedY = max(ChikaDanceMetrics.gutter, min(screenY, pageHeight - ChikaDanceMetrics.statsBarHeight - characterHeight))
-
-        return WrapRect(
-            x: clampedX,
-            y: clampedY,
-            width: characterWidth,
-            height: characterHeight
+        computeChikaCharacterRect(
+            boundsFraction: frame?.boundsFraction,
+            pageWidth: pageWidth,
+            pageHeight: pageHeight
         )
     }
+}
+
+func computeChikaCharacterRect(
+    boundsFraction: WrapRect?,
+    pageWidth: Double,
+    pageHeight: Double
+) -> WrapRect {
+    guard let bounds = boundsFraction else {
+        return WrapRect(x: pageWidth * 0.3, y: 50, width: pageWidth * 0.4, height: pageHeight - 150)
+    }
+
+    let videoAspect = bounds.width / bounds.height * chikaDanceVideoAspect
+    let maxHeight = pageHeight - ChikaDanceMetrics.gutter - ChikaDanceMetrics.statsBarHeight - 16
+    let baseHeight = min(maxHeight, pageHeight * 0.5)
+    let baseWidth = baseHeight * videoAspect
+    let widthCap = pageWidth * 0.45
+    let scale = min(1, widthCap / max(baseWidth, 1))
+    let characterWidth = baseWidth * scale
+    let characterHeight = baseHeight * scale
+
+    let videoCenterX = bounds.x + bounds.width / 2
+    let videoCenterY = bounds.y + bounds.height / 2
+    let screenX = videoCenterX * pageWidth - characterWidth / 2
+    let screenY = videoCenterY * pageHeight - characterHeight / 2
+
+    let clampedX = max(0, min(screenX, pageWidth - characterWidth))
+    let clampedY = max(ChikaDanceMetrics.gutter, min(screenY, pageHeight - ChikaDanceMetrics.statsBarHeight - characterHeight))
+
+    return WrapRect(
+        x: clampedX,
+        y: clampedY,
+        width: characterWidth,
+        height: characterHeight
+    )
 }
 
 // MARK: - Stats bar

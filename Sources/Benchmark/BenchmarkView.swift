@@ -31,6 +31,7 @@ enum BenchmarkAutoRunPolicy {
 }
 
 public struct BenchmarkView: View {
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     private let isCLI = CommandLine.arguments.contains("--cli")
     @State private var state: BenchmarkState = .idle
     @State private var results: [BenchmarkResult] = []
@@ -52,10 +53,7 @@ public struct BenchmarkView: View {
                     emptyState
                     Spacer()
                 } else {
-                    resultsTable
-                        .padding(.horizontal, 48)
-
-                    Spacer(minLength: 16)
+                    resultsContent
                 }
 
                 bottomBar
@@ -69,6 +67,10 @@ public struct BenchmarkView: View {
         }
     }
 
+    private var layoutStyle: BenchmarkResultsLayoutStyle {
+        BenchmarkResultsLayoutStyle.forWidthClass(isCompact: horizontalSizeClass.map { $0 == .compact })
+    }
+
     private var header: some View {
         VStack(spacing: 12) {
             Text("PRETEXT BENCHMARK SUITE")
@@ -77,8 +79,10 @@ public struct BenchmarkView: View {
                 .foregroundStyle(.white.opacity(0.5))
 
             Text("Pretext vs Core Text vs SwiftUI")
-                .font(.system(size: 28, weight: .bold, design: .default))
+                .font(.system(size: layoutStyle == .cards ? 20 : 28, weight: .bold, design: .default))
                 .foregroundStyle(.white)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, layoutStyle == .cards ? 20 : 0)
 
             runButton
         }
@@ -149,16 +153,119 @@ public struct BenchmarkView: View {
         )
     }
 
+    private var resultsContent: some View {
+        Group {
+            switch layoutStyle {
+            case .table:
+                VStack(spacing: 0) {
+                    resultsTable
+                        .padding(.horizontal, 48)
+
+                    Spacer(minLength: 16)
+                }
+            case .cards:
+                ScrollView {
+                    VStack(spacing: 12) {
+                        if results.isEmpty {
+                            compactResultsPlaceholder
+                        } else {
+                            ForEach(results) { result in
+                                compactResultCard(result)
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 16)
+                }
+                .scrollBounceBehavior(.basedOnSize)
+            }
+        }
+    }
+
     private func resultRow(_ result: BenchmarkResult) -> some View {
         HStack(spacing: 0) {
             tableCell(result.name, width: 260, alignment: .leading)
-            tableCell(formatMs(result.pretextMs), width: 100, color: .green)
-            tableCell(formatMs(result.coreTextMs), width: 100)
-            tableCell(result.swiftUIMs.map(formatMs) ?? "—", width: 100)
-            tableCell(formatSpeedup(result.speedupVsCoreText), width: 80, color: speedupColor(result.speedupVsCoreText))
-            tableCell(result.speedupVsSwiftUI.map(formatSpeedup) ?? "—", width: 80, color: result.speedupVsSwiftUI.map(speedupColor) ?? .white.opacity(0.3))
+            tableCell(formatBenchmarkMs(result.pretextMs), width: 100, color: .green)
+            tableCell(formatBenchmarkMs(result.coreTextMs), width: 100)
+            tableCell(result.swiftUIMs.map(formatBenchmarkMs) ?? "—", width: 100)
+            tableCell(formatBenchmarkSpeedup(result.speedupVsCoreText), width: 80, color: benchmarkSpeedupTone(result.speedupVsCoreText).color)
+            tableCell(
+                result.speedupVsSwiftUI.map(formatBenchmarkSpeedup) ?? "—",
+                width: 80,
+                color: result.speedupVsSwiftUI.map { benchmarkSpeedupTone($0).color } ?? BenchmarkMetricTone.muted.color
+            )
         }
         .padding(.vertical, 6)
+    }
+
+    private var compactResultsPlaceholder: some View {
+        RoundedRectangle(cornerRadius: 16)
+            .fill(.white.opacity(0.03))
+            .overlay {
+                VStack(spacing: 8) {
+                    Text("Benchmark results will appear here.")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.7))
+                    Text("Compact iPhone uses cards so every metric stays visible.")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.white.opacity(0.35))
+                }
+                .padding(20)
+            }
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(.white.opacity(0.08), lineWidth: 1)
+            )
+            .frame(maxWidth: .infinity)
+    }
+
+    private func compactResultCard(_ result: BenchmarkResult) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(result.name)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            LazyVGrid(
+                columns: [
+                    GridItem(.flexible(minimum: 0), spacing: 10),
+                    GridItem(.flexible(minimum: 0), spacing: 10),
+                ],
+                alignment: .leading,
+                spacing: 10
+            ) {
+                ForEach(compactBenchmarkMetrics(for: result)) { metric in
+                    compactMetricTile(metric)
+                }
+            }
+        }
+        .padding(14)
+        .background(.white.opacity(0.03))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(.white.opacity(0.08), lineWidth: 1)
+        )
+    }
+
+    private func compactMetricTile(_ metric: BenchmarkMetricDisplay) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(metric.label.uppercased())
+                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                .tracking(0.5)
+                .foregroundStyle(.white.opacity(0.35))
+
+            Text(metric.value)
+                .font(.system(size: 16, weight: .semibold, design: .monospaced))
+                .foregroundStyle(metric.tone.color)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(.white.opacity(0.04))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 
     private func tableCell(
@@ -189,29 +296,6 @@ public struct BenchmarkView: View {
         .padding(.horizontal, 24)
         .padding(.vertical, 10)
         .background(.black.opacity(0.3))
-    }
-
-    private func formatMs(_ ms: Double) -> String {
-        if ms < 1 {
-            return String(format: "%.2fms", ms)
-        } else if ms < 100 {
-            return String(format: "%.1fms", ms)
-        }
-        return String(format: "%.0fms", ms)
-    }
-
-    private func formatSpeedup(_ factor: Double) -> String {
-        if factor >= 100 {
-            return String(format: "%.0fx", factor)
-        }
-        return String(format: "%.1fx", factor)
-    }
-
-    private func speedupColor(_ factor: Double) -> Color {
-        if factor >= 10 { return .green }
-        if factor >= 2 { return Color(red: 0.6, green: 0.9, blue: 0.3) }
-        if factor >= 1 { return .yellow }
-        return .red
     }
 
     private func runAllBenchmarks() {
