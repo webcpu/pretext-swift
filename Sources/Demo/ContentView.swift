@@ -5,6 +5,7 @@ enum DemoScreen: String, CaseIterable, Identifiable {
     case situationalAwareness
     case editorialEngine
     case masonry
+    case chikaDance
     case benchmark
 
     var id: String { rawValue }
@@ -17,6 +18,8 @@ enum DemoScreen: String, CaseIterable, Identifiable {
             "Editorial Engine"
         case .masonry:
             "Masonry"
+        case .chikaDance:
+            "Chika Dance"
         case .benchmark:
             "Benchmark"
         }
@@ -35,6 +38,8 @@ struct ContentView: View {
                 OrbEditorialView()
             case .masonry:
                 MasonryView()
+            case .chikaDance:
+                ChikaDanceView()
             case .benchmark:
                 BenchmarkView()
             }
@@ -48,7 +53,7 @@ struct ContentView: View {
                     }
                 }
                 .pickerStyle(.segmented)
-                .frame(maxWidth: 520)
+                .frame(maxWidth: 640)
             }
         }
     }
