@@ -4,63 +4,49 @@ A native Swift port of the [Pretext](https://github.com/chenglou/pretext) text l
 
 ## Performance
 
-In release mode, Pretext is **6.5x faster than Core Text** and **20x faster than SwiftUI** for batch text layout:
+On the bundled release benchmark, Pretext is about **6x faster than Core Text** and **16x faster than SwiftUI** for batch text layout:
 
 ```
-Pretext:     4.5ms   (500 texts, prepare + layout)
-Core Text:  29.8ms   (CTFramesetterSuggestFrameSizeWithConstraints)
-SwiftUI:    88.6ms   (NSHostingView + fittingSize)
+Pretext:     4.6ms   (500 texts, prepare + layout)
+Core Text:  28.6ms   (CTFramesetterSuggestFrameSizeWithConstraints)
+SwiftUI:    76.5ms   (NSHostingView + fittingSize)
 ```
 
-The hot-path `layout()` is pure arithmetic — **0.1ms for 500 texts**. No Core Text calls, no view hierarchy, no allocations.
+The hot `layout()` path is pure arithmetic. Measurement happens once in `prepare(...)`; repeated layout uses cached widths.
 
 ## Build & Run
 
 ```bash
-# Build (debug)
-swift build
+# Build debug binaries
+rake build
 
-# Build (release, for benchmarks)
-swift build -c release
-
-# Run the demo app (3 screens: editorial layouts + benchmarks)
-swift run PretextDemo
+# Launch the demo app
+rake demo
 
 # Run the CLI benchmark
-.build/release/PretextDemo --benchmark
+rake bench
 
 # Run tests
-swift test
+rake test
 ```
 
 Requires macOS 14+ and Swift 6.0+.
 
-## Architecture
+## Demo
 
-```
-PretextDemo/
-  Pretext/            Core text engine (platform-independent logic)
-    TextAnalysis        Whitespace normalization, word segmentation, punctuation merging
-    TextMeasurement     Core Text glyph advance measurement + caching
-    LineBreaker         Pure arithmetic line-breaking engine
-    PreparedText        Data types (PreparedText, LayoutCursor, SegmentBreakKind)
-    LayoutAPI           Public API: prepare(), layout(), layoutNextLine()
-  Editorial/          Demo screens
-    EditorialView       "Situational Awareness" — light editorial spread with logo obstacles
-    OrbEditorialView    "The Editorial Engine" — dark theme with floating orbs + 3-column reflow
-    WrapGeometry        Polygon/circle obstacle avoidance geometry
-  Benchmark/          Performance comparison suite
-    BenchmarkView       In-app benchmark UI (Pretext vs Core Text vs SwiftUI)
-    BenchmarkTests      Test implementations for all 5 benchmarks
-```
+The demo app includes:
+
+- `Situational Awareness`: light editorial layout with obstacle-aware text flow
+- `Editorial Engine`: dark multi-column editorial layout with animated orb obstacles
+- `Benchmark`: in-app performance comparison against Core Text and SwiftUI
 
 ## How It Works
 
-1. **`prepare(text, font)`** — Segments text, measures each segment via Core Text glyph advances, caches widths. One-time cost.
-2. **`layout(prepared, maxWidth, lineHeight)`** — Walks cached widths with pure arithmetic. Returns `{ lineCount, height }`. No Core Text calls.
-3. **`layoutNextLine(prepared, cursor, maxWidth)`** — Line-by-line iterator for variable-width layouts (text flowing around obstacles).
+1. `prepare(text, font)` segments text, measures runs with Core Text, and caches widths.
+2. `layout(prepared, maxWidth, lineHeight)` computes multiline layout from cached widths.
+3. `layoutNextLine(prepared, cursor, maxWidth)` supports line-by-line flow for variable-width layouts.
 
-The key insight: separate measurement (expensive, done once) from layout (cheap, done every frame). This enables 60fps text reflow around animated obstacles.
+The key idea is separating measurement from layout so animated obstacle reflow can stay cheap.
 
 ## Credits
 

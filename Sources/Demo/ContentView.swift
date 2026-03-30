@@ -1,9 +1,10 @@
+import BenchmarkSupport
 import SwiftUI
 
 enum DemoScreen: String, CaseIterable, Identifiable {
     case situationalAwareness
     case editorialEngine
-    case benchmarks
+    case benchmark
 
     var id: String { rawValue }
 
@@ -13,14 +14,14 @@ enum DemoScreen: String, CaseIterable, Identifiable {
             "Situational Awareness"
         case .editorialEngine:
             "Editorial Engine"
-        case .benchmarks:
-            "Benchmarks"
+        case .benchmark:
+            "Benchmark"
         }
     }
 }
 
 struct ContentView: View {
-    @State private var selection: DemoScreen = .benchmarks
+    @State private var selection: DemoScreen = .situationalAwareness
 
     var body: some View {
         Group {
@@ -29,7 +30,7 @@ struct ContentView: View {
                 EditorialView()
             case .editorialEngine:
                 OrbEditorialView()
-            case .benchmarks:
+            case .benchmark:
                 BenchmarkView()
             }
         }

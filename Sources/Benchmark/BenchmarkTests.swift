@@ -1,5 +1,6 @@
 import CoreText
 import Foundation
+import Pretext
 import SwiftUI
 
 // MARK: - Test 1: Batch Prepare + Layout (500 texts x 1 width)
@@ -9,7 +10,7 @@ func runBatchPrepareAndLayout() -> BenchmarkResult {
     let font = BenchmarkCorpus.font
     let width = BenchmarkCorpus.testWidth
     let lineHeight = BenchmarkCorpus.lineHeight
-    let displayFont = OrbEditorialMetrics.bodyFontDescriptor.makeDisplayFont()
+    let displayFont = BenchmarkCorpus.displayFont
 
     // Pretext: prepare + layout for each text
     let pretextMs = measureMedian {
@@ -59,7 +60,7 @@ func runReflowAtDifferentWidths() -> BenchmarkResult {
     let texts = BenchmarkCorpus.texts
     let font = BenchmarkCorpus.font
     let lineHeight = BenchmarkCorpus.lineHeight
-    let displayFont = OrbEditorialMetrics.bodyFontDescriptor.makeDisplayFont()
+    let displayFont = BenchmarkCorpus.displayFont
     let widths = (0..<100).map { 200.0 + Double($0) * 6.0 }
 
     // Prepare once (excluded from timing)
@@ -110,7 +111,7 @@ func runReflowAtDifferentWidths() -> BenchmarkResult {
 // MARK: - Test 3: Variable-Width Line-by-Line (editorial engine scenario)
 
 func runVariableWidthLineByLine() -> BenchmarkResult {
-    let text = OrbEditorialText.body
+    let text = BenchmarkCorpus.corpusSourceText
     let font = BenchmarkCorpus.font
 
     // Generate 200 random widths between 150 and 500
@@ -162,7 +163,7 @@ func runInterleavedMeasureMutate() -> BenchmarkResult {
     let font = BenchmarkCorpus.font
     let lineHeight = BenchmarkCorpus.lineHeight
     let width = BenchmarkCorpus.testWidth
-    let displayFont = OrbEditorialMetrics.bodyFontDescriptor.makeDisplayFont()
+    let displayFont = BenchmarkCorpus.displayFont
 
     // Pretext: layout() interleaved with re-prepare (simulating mutation)
     // Even if the "source" changes, each prepare+layout pair is independent
@@ -201,99 +202,32 @@ func runInterleavedMeasureMutate() -> BenchmarkResult {
     )
 }
 
-// MARK: - Test 5: Breakeven — at what reflow count does Pretext win?
-
-struct BreakevenResult: Equatable {
-    var prepareMs: Double
-    var coreTextFirstMs: Double
-    var pretextReflowPerCallMs: Double
-    var coreTextReflowPerCallMs: Double
-    var breakevenReflows: Int
-}
-
-func runBreakevenAnalysis() -> (BenchmarkResult, BreakevenResult) {
-    let texts = BenchmarkCorpus.texts
-    let font = BenchmarkCorpus.font
-    let lineHeight = BenchmarkCorpus.lineHeight
-    let width = BenchmarkCorpus.testWidth
-
-    // Measure prepare() cost alone (500 texts)
-    let prepareMs = measureMedian {
-        for text in texts {
-            _ = prepare(text, font: font)
-        }
-    }
-
-    // Measure Core Text first-time cost (500 texts)
-    let coreTextFirstMs = measureMedian {
-        for text in texts {
-            _ = coreTextMeasureHeight(text: text, font: font, width: width)
-        }
-    }
-
-    // Prepare all texts once, then measure reflow cost per width-change
-    var prepared = texts.map { prepare($0, font: font) }
-    let framesetters = texts.map { coreTextCreateFramesetter(text: $0, font: font) }
-
-    // Pretext reflow: 500 texts x 1 width
-    let pretextReflowMs = measureMedian {
-        for index in prepared.indices {
-            _ = layout(&prepared[index], maxWidth: width * 0.75, lineHeight: lineHeight)
-        }
-    }
-
-    // Core Text reflow: 500 texts x 1 width
-    let coreTextReflowMs = measureMedian {
-        for fs in framesetters {
-            _ = coreTextMeasureHeightWithFramesetter(fs, width: width * 0.75)
-        }
-    }
-
-    // Breakeven: prepare + N * pretextReflow = coreTextFirst + N * coreTextReflow
-    // N = (prepare - coreTextFirst) / (coreTextReflow - pretextReflow)
-    let reflowAdvantage = coreTextReflowMs - pretextReflowMs
-    let prepareOverhead = prepareMs - coreTextFirstMs
-    let breakevenN: Int
-    if reflowAdvantage > 0.001 {
-        breakevenN = max(1, Int(ceil(prepareOverhead / reflowAdvantage)))
-    } else {
-        breakevenN = 0 // Pretext is always faster or equal
-    }
-
-    let breakeven = BreakevenResult(
-        prepareMs: prepareMs,
-        coreTextFirstMs: coreTextFirstMs,
-        pretextReflowPerCallMs: pretextReflowMs,
-        coreTextReflowPerCallMs: coreTextReflowMs,
-        breakevenReflows: breakevenN
-    )
-
-    let result = BenchmarkResult(
-        name: "Breakeven: \(breakevenN) reflows",
-        pretextMs: prepareMs + Double(breakevenN) * pretextReflowMs,
-        coreTextMs: coreTextFirstMs + Double(breakevenN) * coreTextReflowMs,
-        swiftUIMs: nil,
-        speedupVsCoreText: 1.0,
-        speedupVsSwiftUI: nil
-    )
-
-    return (result, breakeven)
-}
-
 // MARK: - Main actor helper
 
 /// Runs a closure on the main actor and returns measured median time.
 func measureMedianMainActor(warmup: Int = 1, iterations: Int = 5, _ body: @MainActor @Sendable () -> Void) -> Double {
     var times: [Double] = []
 
+    func runOnMain() {
+        if Thread.isMainThread {
+            MainActor.assumeIsolated {
+                body()
+            }
+        } else {
+            DispatchQueue.main.sync {
+                body()
+            }
+        }
+    }
+
     // Warmup
     for _ in 0..<warmup {
-        DispatchQueue.main.sync { body() }
+        runOnMain()
     }
 
     for _ in 0..<iterations {
         let start = CFAbsoluteTimeGetCurrent()
-        DispatchQueue.main.sync { body() }
+        runOnMain()
         let elapsed = (CFAbsoluteTimeGetCurrent() - start) * 1000
         times.append(elapsed)
     }

@@ -1,3 +1,5 @@
+import Foundation
+import Pretext
 import SwiftUI
 
 private enum BenchmarkState: Equatable {
@@ -6,12 +8,36 @@ private enum BenchmarkState: Equatable {
     case done
 }
 
-struct BenchmarkView: View {
+@MainActor
+enum BenchmarkAutoRunPolicy {
+    private static var hasAutoRunInSession = false
+
+    static var hasRunInSession: Bool {
+        hasAutoRunInSession
+    }
+
+    static func shouldAutoRun(isCLI: Bool) -> Bool {
+        guard !isCLI, !hasAutoRunInSession else {
+            return false
+        }
+
+        hasAutoRunInSession = true
+        return true
+    }
+
+    static func resetForTests() {
+        hasAutoRunInSession = false
+    }
+}
+
+public struct BenchmarkView: View {
+    private let isCLI = CommandLine.arguments.contains("--cli")
     @State private var state: BenchmarkState = .idle
     @State private var results: [BenchmarkResult] = []
-    @State private var breakeven: BreakevenResult?
 
-    var body: some View {
+    public init() {}
+
+    public var body: some View {
         ZStack {
             Color(red: 15 / 255, green: 15 / 255, blue: 20 / 255)
                 .ignoresSafeArea()
@@ -29,12 +55,6 @@ struct BenchmarkView: View {
                     resultsTable
                         .padding(.horizontal, 48)
 
-                    if let breakeven {
-                        breakevenCard(breakeven)
-                            .padding(.horizontal, 48)
-                            .padding(.top, 16)
-                    }
-
                     Spacer(minLength: 16)
                 }
 
@@ -42,6 +62,11 @@ struct BenchmarkView: View {
             }
         }
         .preferredColorScheme(.dark)
+        .onAppear {
+            if state == .idle, BenchmarkAutoRunPolicy.shouldAutoRun(isCLI: isCLI) {
+                runAllBenchmarks()
+            }
+        }
     }
 
     private var header: some View {
@@ -64,7 +89,7 @@ struct BenchmarkView: View {
             Group {
                 switch state {
                 case .idle, .done:
-                    Text(results.isEmpty ? "Run Benchmarks" : "Run Again")
+                    Text(BenchmarkAutoRunPolicy.hasRunInSession ? "Run Again" : "Run Benchmarks")
                 case let .running(test):
                     HStack(spacing: 8) {
                         ProgressView()
@@ -88,7 +113,7 @@ struct BenchmarkView: View {
         VStack(spacing: 8) {
             Text("4 tests comparing text layout performance")
                 .foregroundStyle(.white.opacity(0.4))
-            Text("Batch · Reflow · Line-by-Line · Thrashing")
+            Text("Batch \u{00B7} Reflow \u{00B7} Line-by-Line \u{00B7} Thrashing")
                 .font(.system(size: 13, design: .monospaced))
                 .foregroundStyle(.white.opacity(0.25))
         }
@@ -189,91 +214,69 @@ struct BenchmarkView: View {
         return .red
     }
 
-    private func breakevenCard(_ b: BreakevenResult) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text("BREAKEVEN ANALYSIS")
-                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                    .tracking(1)
-                    .foregroundStyle(.white.opacity(0.4))
-                Spacer()
-                Text("Pretext pays for itself after \(b.breakevenReflows) reflows")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(.green)
-            }
-
-            Divider().background(.white.opacity(0.1))
-
-            HStack(spacing: 32) {
-                breakdownItem("prepare() cost", value: formatMs(b.prepareMs), subtitle: "one-time upfront")
-                breakdownItem("CT first measure", value: formatMs(b.coreTextFirstMs), subtitle: "one-time upfront")
-                breakdownItem("Pretext reflow", value: formatMs(b.pretextReflowPerCallMs), subtitle: "per width change")
-                breakdownItem("CT reflow", value: formatMs(b.coreTextReflowPerCallMs), subtitle: "per width change")
-            }
-
-            Text("At 60fps animation, breakeven is reached in \(max(1, b.breakevenReflows / 60)) frame\(b.breakevenReflows / 60 == 1 ? "" : "s").")
-                .font(.system(size: 12))
-                .foregroundStyle(.white.opacity(0.5))
-        }
-        .padding(16)
-        .background(.white.opacity(0.03))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(.white.opacity(0.08), lineWidth: 1)
-        )
-    }
-
-    private func breakdownItem(_ label: String, value: String, subtitle: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(value)
-                .font(.system(size: 16, weight: .bold, design: .monospaced))
-                .foregroundStyle(.white.opacity(0.8))
-            Text(label)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(.white.opacity(0.5))
-            Text(subtitle)
-                .font(.system(size: 10))
-                .foregroundStyle(.white.opacity(0.3))
-        }
-    }
-
     private func runAllBenchmarks() {
+        guard !isCLI else {
+            return
+        }
+
         results = []
-        breakeven = nil
-        state = .running("Test 1/5: Batch Prepare + Layout...")
+        state = .running("Test 1/4: Batch Prepare + Layout...")
 
         Task.detached {
             let r1 = runBatchPrepareAndLayout()
             await MainActor.run {
                 results.append(r1)
-                state = .running("Test 2/5: Reflow at 100 Widths...")
+                state = .running("Test 2/4: Reflow at 100 Widths...")
             }
 
             let r2 = runReflowAtDifferentWidths()
             await MainActor.run {
                 results.append(r2)
-                state = .running("Test 3/5: Variable-Width Line-by-Line...")
+                state = .running("Test 3/4: Variable-Width Line-by-Line...")
             }
 
             let r3 = runVariableWidthLineByLine()
             await MainActor.run {
                 results.append(r3)
-                state = .running("Test 4/5: Interleaved Measure-Mutate...")
+                state = .running("Test 4/4: Interleaved Measure-Mutate...")
             }
 
             let r4 = runInterleavedMeasureMutate()
             await MainActor.run {
                 results.append(r4)
-                state = .running("Test 5/5: Breakeven Analysis...")
-            }
-
-            let (r5, breakevenData) = runBreakevenAnalysis()
-            await MainActor.run {
-                results.append(r5)
-                breakeven = breakevenData
                 state = .done
             }
         }
     }
+}
+
+public func runBenchmarkCLI() {
+    let result = runBatchPrepareAndLayout()
+
+    PrepareProfile.reset()
+    AnalysisSubProfile.reset()
+    let texts = BenchmarkCorpus.texts
+    let font = BenchmarkCorpus.font
+    let width = BenchmarkCorpus.testWidth
+    let lineHeight = BenchmarkCorpus.lineHeight
+    for text in texts {
+        let prepared = prepare(text, font: font)
+        _ = layout(prepared, maxWidth: width, lineHeight: lineHeight)
+    }
+
+    print("=== Batch Prepare+Layout (500 texts) ===")
+    print(String(format: "Pretext:    %8.2f ms", result.pretextMs))
+    print(String(format: "Core Text:  %8.2f ms", result.coreTextMs))
+    if let swiftUI = result.swiftUIMs {
+        print(String(format: "SwiftUI:    %8.2f ms", swiftUI))
+    }
+    print(String(format: "Speedup vs Core Text: %.1fx", result.speedupVsCoreText))
+    if let speedup = result.speedupVsSwiftUI {
+        print(String(format: "Speedup vs SwiftUI:   %.1fx", speedup))
+    }
+    print()
+    print(PrepareProfile.summary())
+    print(AnalysisSubProfile.summary())
+
+    exit(0)
 }

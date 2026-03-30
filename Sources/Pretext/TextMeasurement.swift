@@ -1,11 +1,11 @@
 import CoreText
 import Foundation
 
-struct SegmentMetrics {
-    var width: Double
-    var containsCJK: Bool
-    var graphemeWidths: [Double]?
-    var graphemePrefixWidths: [Double]?
+public struct SegmentMetrics {
+    public var width: Double
+    public var containsCJK: Bool
+    public var graphemeWidths: [Double]?
+    public var graphemePrefixWidths: [Double]?
 }
 
 private struct FontCacheKey: Hashable {
@@ -25,10 +25,11 @@ private final class MetricsTable {
     var metrics: [String: SegmentMetrics] = [:]
 }
 
-final class TextMeasurer: @unchecked Sendable {
-    static let shared = TextMeasurer()
-    static let engineProfile = EngineProfile(
+public final class TextMeasurer: @unchecked Sendable {
+    public static let shared = TextMeasurer()
+    public static let engineProfile = EngineProfile(
         lineFitEpsilon: 0.005,
+        carryCJKAfterClosingQuote: false,
         preferPrefixWidthsForBreakableRuns: false,
         preferEarlySoftHyphenBreak: false
     )
@@ -43,7 +44,7 @@ final class TextMeasurer: @unchecked Sendable {
 
     private init() {}
 
-    func clearCache() {
+    public func clearCache() {
         metricsCache.removeAll()
         widthCache.removeAll()
     }
@@ -87,7 +88,7 @@ final class TextMeasurer: @unchecked Sendable {
         return CTLineGetTypographicBounds(line, nil, nil, nil)
     }
 
-    func measureSegment(_ text: String, font: CTFont) -> Double {
+    public func measureSegment(_ text: String, font: CTFont) -> Double {
         measureWithGlyphAdvances(text, font: font) ?? measureWithCTLine(text, font: font)
     }
 
@@ -120,7 +121,7 @@ final class TextMeasurer: @unchecked Sendable {
 
     /// Batch measure all segment widths. Uses reference-type cache tables
     /// to avoid dictionary COW copies on every text.
-    func batchMeasureWidths(for segments: [String], in text: String, font: CTFont) -> [Double] {
+    public func batchMeasureWidths(for segments: [String], in text: String, font: CTFont) -> [Double] {
         guard !segments.isEmpty else { return [] }
 
         let fontKey = FontCacheKey(font)
@@ -165,7 +166,7 @@ final class TextMeasurer: @unchecked Sendable {
         return widths
     }
 
-    func graphemeWidths(for text: String, font: CTFont) -> [Double]? {
+    public func graphemeWidths(for text: String, font: CTFont) -> [Double]? {
         let fontKey = FontCacheKey(font)
         let table = metricsCache[fontKey] ?? {
             let t = MetricsTable()
@@ -209,7 +210,7 @@ final class TextMeasurer: @unchecked Sendable {
         return advances.map { Double($0.width) }
     }
 
-    func graphemePrefixWidths(for text: String, font: CTFont) -> [Double]? {
+    public func graphemePrefixWidths(for text: String, font: CTFont) -> [Double]? {
         let fontKey = FontCacheKey(font)
         let table = metricsCache[fontKey] ?? {
             let t = MetricsTable()
@@ -246,12 +247,12 @@ final class TextMeasurer: @unchecked Sendable {
     }
 }
 
-func engineProfile() -> EngineProfile {
+public func engineProfile() -> EngineProfile {
     TextMeasurer.engineProfile
 }
 
 extension String {
-    var graphemeStrings: [String] {
+    public var graphemeStrings: [String] {
         map(String.init)
     }
 }

@@ -13,6 +13,19 @@ private func isSimpleCollapsibleSpace(_ kind: SegmentBreakKind) -> Bool {
     kind == .space
 }
 
+private func shouldKeepWholeFreshLineTextSegment(
+    kinds: [SegmentBreakKind],
+    segmentIndex: Int,
+    graphemeIndex: Int
+) -> Bool {
+    guard graphemeIndex == 0, segmentIndex > 0, kinds[segmentIndex] == .text else {
+        return false
+    }
+
+    let previousKind = kinds[segmentIndex - 1]
+    return previousKind == .preservedSpace || previousKind == .tab
+}
+
 private func getTabAdvance(lineWidth: Double, tabStopAdvance: Double) -> Double {
     guard tabStopAdvance > 0 else {
         return 0
@@ -76,7 +89,7 @@ private func findChunkIndexForStart(_ prepared: PreparedText, segmentIndex: Int)
     return nil
 }
 
-func normalizeLineStart(_ prepared: PreparedText, start: LayoutCursor) -> LayoutCursor? {
+public func normalizeLineStart(_ prepared: PreparedText, start: LayoutCursor) -> LayoutCursor? {
     var segmentIndex = start.segmentIndex
     let graphemeIndex = start.graphemeIndex
 
@@ -102,7 +115,7 @@ func normalizeLineStart(_ prepared: PreparedText, start: LayoutCursor) -> Layout
     }
 
     while segmentIndex < chunk.endSegmentIndex {
-        let kind = prepared.kinds[segmentIndex]
+        let kind = prepared.layoutKinds[segmentIndex]
         if kind != .space, kind != .zeroWidthBreak, kind != .softHyphen {
             return LayoutCursor(segmentIndex: segmentIndex, graphemeIndex: 0)
         }
@@ -116,7 +129,7 @@ func normalizeLineStart(_ prepared: PreparedText, start: LayoutCursor) -> Layout
     return LayoutCursor(segmentIndex: chunk.consumedEndSegmentIndex, graphemeIndex: 0)
 }
 
-func countPreparedLines(_ prepared: PreparedText, maxWidth: Double) -> Int {
+public func countPreparedLines(_ prepared: PreparedText, maxWidth: Double) -> Int {
     if prepared.simpleLineWalkFastPath {
         return countPreparedLinesSimple(prepared, maxWidth: maxWidth)
     }
@@ -125,7 +138,7 @@ func countPreparedLines(_ prepared: PreparedText, maxWidth: Double) -> Int {
 
 private func countPreparedLinesSimple(_ prepared: PreparedText, maxWidth: Double) -> Int {
     let widths = prepared.widths
-    let kinds = prepared.kinds
+    let kinds = prepared.layoutKinds
     let breakableWidths = prepared.breakableWidths
     let breakablePrefixWidths = prepared.breakablePrefixWidths
 
@@ -142,7 +155,15 @@ private func countPreparedLinesSimple(_ prepared: PreparedText, maxWidth: Double
 
     func placeOnFreshLine(segmentIndex: Int) {
         let width = widths[segmentIndex]
-        if width > maxWidth, let graphemeWidths = breakableWidths[segmentIndex] {
+        if
+            width > maxWidth,
+            let graphemeWidths = breakableWidths[segmentIndex],
+            !shouldKeepWholeFreshLineTextSegment(
+                kinds: kinds,
+                segmentIndex: segmentIndex,
+                graphemeIndex: 0
+            )
+        {
             let graphemePrefixWidths = breakablePrefixWidths[segmentIndex]
             lineWidth = 0
             for graphemeIndex in graphemeWidths.indices {
@@ -202,7 +223,7 @@ private func walkPreparedLinesSimple(
     onLine: ((InternalLayoutLine) -> Void)?
 ) -> Int {
     let widths = prepared.widths
-    let kinds = prepared.kinds
+    let kinds = prepared.layoutKinds
     let breakableWidths = prepared.breakableWidths
     let breakablePrefixWidths = prepared.breakablePrefixWidths
 
@@ -325,7 +346,15 @@ private func walkPreparedLinesSimple(
         let kind = kinds[index]
 
         if !hasContent {
-            if width > maxWidth, breakableWidths[index] != nil {
+            if
+                width > maxWidth,
+                breakableWidths[index] != nil,
+                !shouldKeepWholeFreshLineTextSegment(
+                    kinds: kinds,
+                    segmentIndex: index,
+                    graphemeIndex: 0
+                )
+            {
                 appendBreakableSegmentFrom(index, startGraphemeIndex: 0)
             } else {
                 startLineAtSegment(index, width: width)
@@ -373,7 +402,7 @@ private func walkPreparedLinesSimple(
 }
 
 @discardableResult
-func walkPreparedLines(
+public func walkPreparedLines(
     _ prepared: PreparedText,
     maxWidth: Double,
     onLine: ((InternalLayoutLine) -> Void)?
@@ -385,7 +414,7 @@ func walkPreparedLines(
     let widths = prepared.widths
     let lineEndFitAdvances = prepared.lineEndFitAdvances
     let lineEndPaintAdvances = prepared.lineEndPaintAdvances
-    let kinds = prepared.kinds
+    let kinds = prepared.layoutKinds
     let breakableWidths = prepared.breakableWidths
     let breakablePrefixWidths = prepared.breakablePrefixWidths
     let discretionaryHyphenWidth = prepared.discretionaryHyphenWidth
@@ -603,7 +632,15 @@ func walkPreparedLines(
             }
 
             if !hasContent {
-                if width > maxWidth, breakableWidths[index] != nil {
+                if
+                    width > maxWidth,
+                    breakableWidths[index] != nil,
+                    !shouldKeepWholeFreshLineTextSegment(
+                        kinds: kinds,
+                        segmentIndex: index,
+                        graphemeIndex: 0
+                    )
+                {
                     appendBreakableSegmentFrom(index, startGraphemeIndex: 0)
                 } else {
                     startLineAtSegment(index, width: width)
@@ -679,7 +716,7 @@ func walkPreparedLines(
     return lineCount
 }
 
-func layoutNextLineRange(
+public func layoutNextLineRange(
     _ prepared: PreparedText,
     start: LayoutCursor,
     maxWidth: Double
@@ -710,7 +747,7 @@ func layoutNextLineRange(
     let widths = prepared.widths
     let lineEndFitAdvances = prepared.lineEndFitAdvances
     let lineEndPaintAdvances = prepared.lineEndPaintAdvances
-    let kinds = prepared.kinds
+    let kinds = prepared.layoutKinds
     let breakableWidths = prepared.breakableWidths
     let breakablePrefixWidths = prepared.breakablePrefixWidths
     let discretionaryHyphenWidth = prepared.discretionaryHyphenWidth
@@ -891,7 +928,15 @@ func layoutNextLineRange(
                 if let line = appendBreakableSegmentFrom(index, startGraphemeIndex: startGraphemeIndex) {
                     return line
                 }
-            } else if width > maxWidth, breakableWidths[index] != nil {
+            } else if
+                width > maxWidth,
+                breakableWidths[index] != nil,
+                !shouldKeepWholeFreshLineTextSegment(
+                    kinds: kinds,
+                    segmentIndex: index,
+                    graphemeIndex: startGraphemeIndex
+                )
+            {
                 if let line = appendBreakableSegmentFrom(index, startGraphemeIndex: 0) {
                     return line
                 }
@@ -957,7 +1002,7 @@ private func layoutNextLineRangeSimple(
     maxWidth: Double
 ) -> InternalLayoutLine? {
     let widths = prepared.widths
-    let kinds = prepared.kinds
+    let kinds = prepared.layoutKinds
     let breakableWidths = prepared.breakableWidths
     let breakablePrefixWidths = prepared.breakablePrefixWidths
     let profile = engineProfile()
@@ -1066,7 +1111,15 @@ private func layoutNextLineRangeSimple(
                 if let line = appendBreakableSegmentFrom(index, startGraphemeIndex: startGraphemeIndex) {
                     return line
                 }
-            } else if width > maxWidth, breakableWidths[index] != nil {
+            } else if
+                width > maxWidth,
+                breakableWidths[index] != nil,
+                !shouldKeepWholeFreshLineTextSegment(
+                    kinds: kinds,
+                    segmentIndex: index,
+                    graphemeIndex: startGraphemeIndex
+                )
+            {
                 if let line = appendBreakableSegmentFrom(index, startGraphemeIndex: 0) {
                     return line
                 }

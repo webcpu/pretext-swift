@@ -7,23 +7,51 @@ let package = Package(
         .macOS(.v14),
     ],
     products: [
+        .library(
+            name: "Pretext",
+            targets: ["Pretext"]
+        ),
         .executable(
-            name: "PretextDemo",
-            targets: ["PretextDemo"]
+            name: "Demo",
+            targets: ["Demo"]
+        ),
+        .executable(
+            name: "Benchmark",
+            targets: ["Benchmark"]
         ),
     ],
     targets: [
+        .target(
+            name: "Pretext",
+            path: "Sources/Pretext"
+        ),
         .executableTarget(
-            name: "PretextDemo",
-            path: "PretextDemo",
+            name: "Demo",
+            dependencies: ["Pretext", "BenchmarkSupport"],
+            path: "Sources/Demo",
             resources: [
                 .process("Resources"),
             ]
         ),
+        .target(
+            name: "BenchmarkSupport",
+            dependencies: ["Pretext"],
+            path: "Sources/Benchmark"
+        ),
+        .executableTarget(
+            name: "Benchmark",
+            dependencies: ["BenchmarkSupport"],
+            path: "Sources/BenchmarkApp"
+        ),
         .testTarget(
-            name: "PretextDemoTests",
-            dependencies: ["PretextDemo"],
-            path: "Tests/PretextDemoTests"
+            name: "PretextTests",
+            dependencies: ["Pretext"],
+            path: "Tests/PretextTests"
+        ),
+        .testTarget(
+            name: "DemoTests",
+            dependencies: ["Demo", "BenchmarkSupport"],
+            path: "Tests/DemoTests"
         ),
     ],
     swiftLanguageModes: [.v6]

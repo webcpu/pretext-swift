@@ -1,5 +1,5 @@
 import XCTest
-@testable import PretextDemo
+@testable import Demo
 
 final class LogoHullTests: XCTestCase {
     func testBundledLogoResourcesUseRealPathMarkup() throws {
@@ -28,5 +28,5 @@ private func resourceURL(named resourceName: String) -> URL {
         .deletingLastPathComponent()
         .deletingLastPathComponent()
         .deletingLastPathComponent()
-        .appendingPathComponent("PretextDemo/Resources/\(resourceName).svg")
+        .appendingPathComponent("Sources/Demo/Resources/\(resourceName).svg")
 }

@@ -1,5 +1,5 @@
 import XCTest
-@testable import PretextDemo
+@testable import Pretext
 
 final class LineBreakerTests: XCTestCase {
     func testLayoutNextLineBreaksAtSpaceBoundary() {

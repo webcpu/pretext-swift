@@ -1,5 +1,5 @@
 import XCTest
-@testable import PretextDemo
+@testable import Demo
 
 final class WrapGeometryTests: XCTestCase {
     func testCarveTextLineSlotsSplitsAroundBlockedInterval() {

@@ -2,13 +2,21 @@
 
 Native Swift port of [Pretext](https://github.com/chenglou/pretext) — a text layout engine that measures and lays out multiline text without touching the view hierarchy.
 
+### Project structure
+
+Three targets:
+- **Pretext** — reusable library (core engine)
+- **Demo** — macOS demo app (2 editorial screens)
+- **Benchmark** — benchmark app (GUI + CLI)
+
 ### Commands
 
-- `swift build` — debug build
+- `swift build` — debug build (all targets)
 - `swift build -c release` — release build (10x faster, use for benchmarks)
-- `swift test` — run all tests (16 tests)
-- `swift run PretextDemo` — launch the demo app (3 screens)
-- `.build/release/PretextDemo --benchmark` — CLI benchmark (Pretext vs Core Text vs SwiftUI)
+- `swift test` — run all tests (PretextTests + DemoTests, 41 total)
+- `swift run Demo` — launch the demo app (2 screens)
+- `swift run Benchmark` — launch the benchmark GUI
+- `.build/release/Benchmark --cli` — CLI benchmark (Pretext vs Core Text vs SwiftUI)
 
 ### Architecture
 
@@ -19,15 +27,25 @@ The engine has a clean two-phase split:
 
 ### Important files
 
-- `PretextDemo/Pretext/LayoutAPI.swift` — public API: `prepare()`, `layout()`, `layoutNextLine()`, `walkLineRanges()`
-- `PretextDemo/Pretext/TextAnalysis.swift` — UTF-8 byte scanner, whitespace normalization, punctuation merging
-- `PretextDemo/Pretext/TextMeasurement.swift` — Core Text glyph advance measurement, segment cache
-- `PretextDemo/Pretext/LineBreaker.swift` — pure arithmetic line-breaking engine (~1100 lines)
-- `PretextDemo/Pretext/PreparedText.swift` — all data types
-- `PretextDemo/Editorial/EditorialView.swift` — "Situational Awareness" demo (light theme, logo obstacles)
-- `PretextDemo/Editorial/OrbEditorialView.swift` — "Editorial Engine" demo (dark theme, floating orbs)
-- `PretextDemo/Benchmark/BenchmarkTests.swift` — 5 benchmark tests
-- `PretextDemo/PretextDemoApp.swift` — app entry point, `--benchmark` CLI mode
+**Pretext library** (`Sources/Pretext/`):
+- `LayoutAPI.swift` — public API: `prepare()`, `layout()`, `layoutNextLine()`, `walkLineRanges()`
+- `TextAnalysis.swift` — UTF-8 byte scanner, whitespace normalization, punctuation merging
+- `TextMeasurement.swift` — Core Text glyph advance measurement, segment cache
+- `LineBreaker.swift` — pure arithmetic line-breaking engine (~1100 lines)
+- `PreparedText.swift` — all data types
+
+**Demo app** (`Sources/Demo/`):
+- `DemoApp.swift` — app entry point
+- `Editorial/EditorialView.swift` — "Situational Awareness" demo (light theme, logo obstacles)
+- `Editorial/OrbEditorialView.swift` — "Editorial Engine" demo (dark theme, floating orbs)
+
+**Benchmark app** (`Sources/Benchmark/`):
+- `BenchmarkApp.swift` — app entry point, `--cli` mode
+- `BenchmarkTests.swift` — 5 benchmark tests
+
+**Tests:**
+- `Tests/PretextTests/` — core engine tests (CoreEngineTests, LineBreakerTests, TextAnalysisTests)
+- `Tests/DemoTests/` — demo tests (EditorialLayoutTests, LogoHullTests, OrbEditorialLayoutTests, WrapGeometryTests)
 
 ### Performance (release mode, Apple Silicon)
 

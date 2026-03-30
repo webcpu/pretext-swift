@@ -1,6 +1,7 @@
 import CoreGraphics
+import Pretext
 import XCTest
-@testable import PretextDemo
+@testable import Demo
 
 final class OrbEditorialLayoutTests: XCTestCase {
     func testOrbEditorialColumnCountUsesResponsiveBreakpoints() {

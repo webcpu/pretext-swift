@@ -1,6 +1,6 @@
 import CoreText
 import XCTest
-@testable import PretextDemo
+@testable import Pretext
 
 final class TextAnalysisTests: XCTestCase {
     func testBatchMeasureWidthsProducesConsistentResults() {

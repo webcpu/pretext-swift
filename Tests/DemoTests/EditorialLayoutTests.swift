@@ -1,5 +1,6 @@
+import Pretext
 import XCTest
-@testable import PretextDemo
+@testable import Demo
 
 final class EditorialLayoutTests: XCTestCase {
     func testBuildLayoutSwitchesToNarrowUnderBreakpoint() {

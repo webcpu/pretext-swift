@@ -1,4 +1,5 @@
 import AppKit
+import Pretext
 import SwiftUI
 
 private enum LogoKind {
