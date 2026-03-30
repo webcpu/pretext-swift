@@ -4,12 +4,17 @@ import PackageDescription
 let package = Package(
     name: "PretextSwift",
     platforms: [
-        .macOS(.v14),
+        .iOS(.v18),
+        .macOS(.v15),
     ],
     products: [
         .library(
             name: "Pretext",
             targets: ["Pretext"]
+        ),
+        .library(
+            name: "PretextUI",
+            targets: ["PretextUI"]
         ),
         .executable(
             name: "Demo",
@@ -25,9 +30,14 @@ let package = Package(
             name: "Pretext",
             path: "Sources/Pretext"
         ),
+        .target(
+            name: "PretextUI",
+            dependencies: ["Pretext"],
+            path: "Sources/PretextUI"
+        ),
         .executableTarget(
             name: "Demo",
-            dependencies: ["Pretext", "BenchmarkSupport"],
+            dependencies: ["Pretext", "PretextUI", "BenchmarkSupport"],
             path: "Sources/Demo",
             resources: [
                 .process("Resources"),
@@ -35,7 +45,7 @@ let package = Package(
         ),
         .target(
             name: "BenchmarkSupport",
-            dependencies: ["Pretext"],
+            dependencies: ["Pretext", "PretextUI"],
             path: "Sources/Benchmark"
         ),
         .executableTarget(

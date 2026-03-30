@@ -1,6 +1,7 @@
 import AVFoundation
 import CoreVideo
 import Pretext
+import PretextUI
 import SwiftUI
 
 private final class VideoFrameProvider: @unchecked Sendable {

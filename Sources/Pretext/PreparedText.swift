@@ -1,6 +1,5 @@
 import CoreText
 import Foundation
-import SwiftUI
 
 public enum SegmentBreakKind: Equatable, Sendable {
     case text
@@ -153,9 +152,5 @@ public struct FontDescriptor: Equatable, Sendable {
 
         let descriptor = CTFontDescriptorCreateWithAttributes(attributes as CFDictionary)
         return CTFontCreateWithFontDescriptor(descriptor, size, nil)
-    }
-
-    public func makeDisplayFont() -> Font {
-        Font(makeCTFont())
     }
 }

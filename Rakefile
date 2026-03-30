@@ -1,6 +1,27 @@
+require "json"
+
+def ios_pretext_test_destination
+  devices = JSON.parse(`xcrun simctl list devices available --json`).fetch("devices").values.flatten
+  iphone = devices.find { |device| device["isAvailable"] && device["name"].start_with?("iPhone") }
+
+  raise "No available iPhone simulator found" unless iphone
+
+  "platform=iOS Simulator,id=#{iphone.fetch("udid")}"
+end
+
 desc "Debug build (all targets)"
 task :build do
   sh "swift build"
+end
+
+desc "Build the Pretext library for iOS Simulator"
+task :build_ios_pretext do
+  sh "xcodebuild -scheme Pretext -destination 'generic/platform=iOS Simulator' build CODE_SIGNING_ALLOWED=NO"
+end
+
+desc "Run PretextTests on an iOS Simulator"
+task :test_ios_pretext do
+  sh "xcodebuild test -scheme PretextSwift-Package -destination '#{ios_pretext_test_destination}' -only-testing:PretextTests CODE_SIGNING_ALLOWED=NO"
 end
 
 desc "Release build"

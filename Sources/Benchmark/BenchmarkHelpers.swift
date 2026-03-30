@@ -1,7 +1,12 @@
-import AppKit
 import CoreText
 import Foundation
 import SwiftUI
+
+#if os(macOS)
+import AppKit
+#elseif os(iOS)
+import UIKit
+#endif
 
 // MARK: - Timing
 
@@ -79,23 +84,16 @@ func coreTextLayoutLineByLine(typesetter: CTTypesetter, length: Int, widths: [Do
 @MainActor
 func swiftUIMeasureHeight(text: String, font: Font, width: Double) -> Double {
     let view = Text(text).font(font).frame(width: width, alignment: .leading)
+
+    #if os(macOS)
     let hostingView = NSHostingView(rootView: view)
     hostingView.frame = NSRect(x: 0, y: 0, width: width, height: 10000)
     hostingView.layout()
     return hostingView.fittingSize.height
-}
-
-@MainActor
-func swiftUICreateHostingView(text: String, font: Font, width: Double) -> NSHostingView<some View> {
-    let view = Text(text).font(font).frame(width: width, alignment: .leading)
-    let hostingView = NSHostingView(rootView: view)
-    hostingView.frame = NSRect(x: 0, y: 0, width: width, height: 10000)
-    return hostingView
-}
-
-@MainActor
-func swiftUIMeasureWithHostingView(_ hostingView: NSHostingView<some View>, width: Double) -> Double {
-    hostingView.frame.size.width = width
-    hostingView.layout()
-    return hostingView.fittingSize.height
+    #else
+    let hostingController = UIHostingController(rootView: view)
+    let bounds = CGRect(x: 0, y: 0, width: width, height: 10000)
+    hostingController.view.bounds = bounds
+    return hostingController.sizeThatFits(in: bounds.size).height
+    #endif
 }

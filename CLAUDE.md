@@ -4,17 +4,19 @@ Native Swift port of [Pretext](https://github.com/chenglou/pretext) — a text l
 
 ### Project structure
 
-Three targets:
+Four targets:
 - **Pretext** — reusable library (core engine)
-- **Demo** — macOS demo app (2 editorial screens)
-- **Benchmark** — benchmark app (GUI + CLI)
+- **PretextUI** — optional SwiftUI bridge for `FontDescriptor.makeDisplayFont()`
+- **Demo** — macOS demo app
+- **Benchmark** — macOS benchmark app (GUI + CLI)
 
 ### Commands
 
 - `swift build` — debug build (all targets)
 - `swift build -c release` — release build (10x faster, use for benchmarks)
-- `swift test` — run all tests (PretextTests + DemoTests, 41 total)
-- `swift run Demo` — launch the demo app (2 screens)
+- `swift test` — run all tests (PretextTests + DemoTests)
+- `xcodebuild -scheme Pretext -destination 'generic/platform=iOS Simulator' build CODE_SIGNING_ALLOWED=NO` — validate the `Pretext` library on iOS Simulator
+- `swift run Demo` — launch the demo app
 - `swift run Benchmark` — launch the benchmark GUI
 - `.build/release/Benchmark --cli` — CLI benchmark (Pretext vs Core Text vs SwiftUI)
 
@@ -33,6 +35,9 @@ The engine has a clean two-phase split:
 - `TextMeasurement.swift` — Core Text glyph advance measurement, segment cache
 - `LineBreaker.swift` — pure arithmetic line-breaking engine (~1100 lines)
 - `PreparedText.swift` — all data types
+
+**PretextUI bridge** (`Sources/PretextUI/`):
+- `FontDescriptor+SwiftUI.swift` — SwiftUI helper kept out of the core target
 
 **Demo app** (`Sources/Demo/`):
 - `DemoApp.swift` — app entry point
@@ -57,6 +62,12 @@ SwiftUI:   ~88ms    (NSHostingView + fittingSize)
 
 Pretext is **6.5x faster** than Core Text, **20x faster** than SwiftUI. The hot-path `layout()` takes 0.1ms for 500 texts.
 
+### Platform support
+
+- `Pretext` supports `iOS 18+` and `macOS 15+`
+- `PretextUI` is optional and only provides the SwiftUI display-font helper
+- `Demo` and `Benchmark` are maintained as macOS-only repo apps
+
 ### Key design decisions
 
 - **Always benchmark in release mode** (`-c release`). Debug mode inflates numbers by 10x due to no inlining, full bounds checking, uneliminated ARC.
@@ -67,14 +78,10 @@ Pretext is **6.5x faster** than Core Text, **20x faster** than SwiftUI. The hot-
 - Reference-type cache wrappers (`WidthTable`, `MetricsTable`) avoid Dictionary COW copies in the batch measurement loop — though in release mode the compiler optimizes value-type COW nearly as well.
 - The glyph-advance fast path (`CTFontGetGlyphsForCharacters` + `CTFontGetAdvancesForGlyphs`) bypasses CTLine creation for Latin text. Falls back to CTTypesetter for complex scripts.
 
-### Known test failures
+### Current test status
 
-4 tests in `CoreEngineTests` fail due to known gaps in the scalar scanner:
-- CJK character splitting (the UTF-8 scanner doesn't run `splitCJKSegments`)
-- NBSP glue merging (the scanner treats NBSP as a separate segment, not merged)
-- Pre-wrap consecutive hard breaks
-
-These affect the scalar fast path only. The tokenizer fallback path (Thai/Khmer/Myanmar/Lao) still handles them. Fix by adding CJK splitting and NBSP merging to `analyzeUTF8Buffer()`.
+- `swift test --filter PretextTests` currently passes
+- `Demo` and `Benchmark` still compile on macOS after the `PretextUI` split
 
 ### Optimization history
 

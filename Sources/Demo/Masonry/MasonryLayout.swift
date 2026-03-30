@@ -1,5 +1,6 @@
 import Foundation
 import Pretext
+import PretextUI
 import SwiftUI
 
 enum MasonryMetrics {

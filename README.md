@@ -14,11 +14,20 @@ SwiftUI:    76.5ms   (NSHostingView + fittingSize)
 
 The hot `layout()` path is pure arithmetic. Measurement happens once in `prepare(...)`; repeated layout uses cached widths.
 
+## Platform Support
+
+- `Pretext` supports `iOS 18+` and `macOS 15+`
+- `PretextUI` provides the optional `SwiftUI.Font` bridge on those same platforms
+- `Demo` and `Benchmark` remain macOS-only showcase apps in this repository
+
 ## Build & Run
 
 ```bash
 # Build debug binaries
 rake build
+
+# Validate the Pretext library for iOS Simulator
+rake build_ios_pretext
 
 # Launch the demo app
 rake demo
@@ -30,14 +39,16 @@ rake bench
 rake test
 ```
 
-Requires macOS 14+ and Swift 6.0+.
+Requires Xcode with iOS 18 / macOS 15 SDK support and Swift 6.0+.
 
 ## Demo
 
-The demo app includes:
+The macOS demo app includes:
 
 - `Situational Awareness`: light editorial layout with obstacle-aware text flow
 - `Editorial Engine`: dark multi-column editorial layout with animated orb obstacles
+- `Masonry`: waterfall card layout driven by cached text measurement
+- `Chika Dance`: animated reflow around live video silhouettes
 - `Benchmark`: in-app performance comparison against Core Text and SwiftUI
 
 ## How It Works

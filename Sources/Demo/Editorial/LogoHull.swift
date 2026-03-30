@@ -1,8 +1,15 @@
-import AppKit
 import Foundation
 
+#if os(macOS)
+import AppKit
+typealias PlatformImage = NSImage
+#elseif os(iOS)
+import UIKit
+typealias PlatformImage = UIImage
+#endif
+
 struct LoadedLogo {
-    var image: NSImage
+    var image: PlatformImage
     var layoutHull: [WrapPoint]
     var hitHull: [WrapPoint]
 }
@@ -32,11 +39,12 @@ func loadBundledLogo(named resourceName: String, layoutSmoothRadius: Int, hitSmo
     }
 }
 
-private func loadBundledSVGImage(named resourceName: String) throws -> NSImage {
+private func loadBundledSVGImage(named resourceName: String) throws -> PlatformImage {
     guard let url = Bundle.module.url(forResource: resourceName, withExtension: "svg") else {
         throw LogoHullError.missingResource(resourceName)
     }
 
+    #if os(macOS)
     guard let image = NSImage(contentsOf: url) else {
         throw LogoHullError.invalidSVG("Unable to load \(resourceName).svg")
     }
@@ -46,9 +54,12 @@ private func loadBundledSVGImage(named resourceName: String) throws -> NSImage {
     }
 
     return image
+    #else
+    throw LogoHullError.invalidSVG("Unable to load \(resourceName).svg on iOS")
+    #endif
 }
 
-func makeWrapHull(from image: NSImage, smoothRadius: Int, mode: WrapHullMode) -> [WrapPoint] {
+func makeWrapHull(from image: PlatformImage, smoothRadius: Int, mode: WrapHullMode) -> [WrapPoint] {
     let imageSize = image.size
     let aspect = max(0.1, imageSize.width / max(1, imageSize.height))
     let maxDimension = 320.0
@@ -69,7 +80,7 @@ func makeWrapHull(from image: NSImage, smoothRadius: Int, mode: WrapHullMode) ->
             space: CGColorSpaceCreateDeviceRGB(),
             bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
         ),
-        let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil)
+        let cgImage = platformCGImage(from: image)
     else {
         return []
     }
@@ -190,8 +201,17 @@ func makeWrapHull(from image: NSImage, smoothRadius: Int, mode: WrapHullMode) ->
     return points
 }
 
-private func makeFallbackImage() -> NSImage {
+private func platformCGImage(from image: PlatformImage) -> CGImage? {
+    #if os(macOS)
+    image.cgImage(forProposedRect: nil, context: nil, hints: nil)
+    #else
+    image.cgImage
+    #endif
+}
+
+private func makeFallbackImage() -> PlatformImage {
     let size = CGSize(width: 160, height: 160)
+    #if os(macOS)
     let image = NSImage(size: size)
     image.lockFocus()
     NSColor.white.setFill()
@@ -204,4 +224,17 @@ private func makeFallbackImage() -> NSImage {
     path.fill()
     image.unlockFocus()
     return image
+    #else
+    let renderer = UIGraphicsImageRenderer(size: size)
+    return renderer.image { _ in
+        UIColor.white.setFill()
+        let path = UIBezierPath()
+        path.move(to: CGPoint(x: 80, y: 10))
+        path.addLine(to: CGPoint(x: 150, y: 80))
+        path.addLine(to: CGPoint(x: 80, y: 150))
+        path.addLine(to: CGPoint(x: 10, y: 80))
+        path.close()
+        path.fill()
+    }
+    #endif
 }

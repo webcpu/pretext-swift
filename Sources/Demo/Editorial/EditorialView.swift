@@ -1,5 +1,7 @@
+#if os(macOS)
 import AppKit
 import Pretext
+import PretextUI
 import SwiftUI
 
 private enum LogoKind {
@@ -472,3 +474,12 @@ struct EditorialView: View {
         return 1 - oneMinusT * oneMinusT * oneMinusT
     }
 }
+#else
+import SwiftUI
+
+struct EditorialView: View {
+    var body: some View {
+        Color.clear
+    }
+}
+#endif

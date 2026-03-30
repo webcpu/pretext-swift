@@ -1,6 +1,7 @@
 import CoreText
 import Foundation
 import Pretext
+import PretextUI
 import SwiftUI
 
 // MARK: - Test 1: Batch Prepare + Layout (500 texts x 1 width)

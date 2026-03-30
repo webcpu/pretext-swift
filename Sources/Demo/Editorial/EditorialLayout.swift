@@ -1,6 +1,7 @@
 import CoreText
 import Foundation
 import Pretext
+import PretextUI
 import SwiftUI
 
 enum EditorialMetrics {

@@ -1,5 +1,7 @@
+#if os(macOS)
 import AppKit
 import Pretext
+import PretextUI
 import SwiftUI
 
 private enum OrbEditorialPalette {
@@ -483,3 +485,12 @@ struct OrbEditorialView: View {
         )
     }
 }
+#else
+import SwiftUI
+
+struct OrbEditorialView: View {
+    var body: some View {
+        Color.clear
+    }
+}
+#endif
