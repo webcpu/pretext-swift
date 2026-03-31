@@ -96,6 +96,47 @@ final class OrbEditorialLayoutTests: XCTestCase {
         XCTAssertLessThanOrEqual(headlineHeight, viewportSize.height * profile.headlineMaxHeightFraction + 1)
     }
 
+    func testWatchPresentationRemovesDecorativeTextAndRestoresOpeningCharacter() {
+        let viewportSize = CGSize(width: 390, height: 844)
+        let orbs = makeInitialOrbStates(pageSize: viewportSize)
+        let standard = evaluateOrbEditorialLayout(
+            pageWidth: viewportSize.width,
+            pageHeight: viewportSize.height,
+            compositionHeight: viewportSize.height,
+            orbs: orbs
+        )
+        let watch = evaluateOrbEditorialLayout(
+            pageWidth: viewportSize.width,
+            pageHeight: viewportSize.height,
+            compositionHeight: viewportSize.height,
+            orbs: orbs,
+            presentation: .watch
+        )
+
+        XCTAssertEqual(standard.pullquotes.count, 2)
+        XCTAssertEqual(watch.pullquotes.count, 0)
+        XCTAssertGreaterThan(standard.dropCapRect.width, 0)
+        XCTAssertEqual(watch.dropCapRect.width, 0)
+        XCTAssertTrue(standard.bodyLines.first?.text.hasPrefix("he") == true)
+        XCTAssertTrue(watch.bodyLines.first?.text.hasPrefix("The") == true)
+    }
+
+    func testWatchPresentationUsesBodyFocusedViewportOnAW11Size() {
+        let viewportSize = CGSize(width: 416, height: 496)
+        let orbs = makeInitialOrbStates(pageSize: viewportSize, platform: .watchOS)
+        let snapshot = evaluateOrbEditorialLayout(
+            pageWidth: viewportSize.width,
+            pageHeight: viewportSize.height,
+            compositionHeight: viewportSize.height,
+            orbs: orbs,
+            presentation: .watch
+        )
+
+        XCTAssertFalse(snapshot.bodyLines.isEmpty)
+        XCTAssertLessThan(snapshot.bodyLines[0].y, viewportSize.height - snapshot.bodyLineHeight)
+        XCTAssertTrue(snapshot.bodyLines[0].text.hasPrefix("The"))
+    }
+
     func testInitialOrbStatesUseTwoThirdsRadiusOnCompactPhoneViewport() {
         let compactViewport = CGSize(width: 390, height: 844)
         let regularViewport = CGSize(width: 1024, height: 1366)
@@ -107,5 +148,36 @@ final class OrbEditorialLayoutTests: XCTestCase {
         for (compactOrb, regularOrb) in zip(compactOrbs, regularOrbs) {
             XCTAssertEqual(compactOrb.radius, regularOrb.radius * (2.0 / 3.0), accuracy: 0.001)
         }
+    }
+
+    func testWatchOrbStatesUseOneThirdRadiusScale() {
+        let watchViewport = CGSize(width: 416, height: 496)
+        let regularViewport = CGSize(width: 1024, height: 1366)
+        let watchOrbs = makeInitialOrbStates(pageSize: watchViewport, platform: .watchOS)
+        let regularOrbs = makeInitialOrbStates(pageSize: regularViewport, platform: .macOS)
+
+        XCTAssertEqual(watchOrbs.count, 3)
+        XCTAssertEqual(watchOrbs.map(\.id), [1, 3, 4])
+
+        let expectedRegularOrbs = regularOrbs.filter { [1, 3, 4].contains($0.id) }
+        for (watchOrb, regularOrb) in zip(watchOrbs, expectedRegularOrbs) {
+            XCTAssertEqual(watchOrb.radius, regularOrb.radius / 3.0, accuracy: 0.001)
+        }
+    }
+
+    func testWatchPresentationUsesSmallerTypographyThanCompactPhoneProfile() {
+        let viewportSize = CGSize(width: 416, height: 496)
+        let orbs = makeInitialOrbStates(pageSize: viewportSize, platform: .watchOS)
+        let snapshot = evaluateOrbEditorialLayout(
+            pageWidth: viewportSize.width,
+            pageHeight: viewportSize.height,
+            compositionHeight: viewportSize.height,
+            orbs: orbs,
+            presentation: .watch
+        )
+
+        XCTAssertLessThan(snapshot.bodyFontSize, OrbEditorialMetrics.compactProfile.bodyFontSize)
+        XCTAssertLessThan(snapshot.bodyLineHeight, OrbEditorialMetrics.compactProfile.bodyLineHeight)
+        XCTAssertLessThan(snapshot.headlineFontSize, Double(OrbEditorialMetrics.compactProfile.headlineMaxSize))
     }
 }

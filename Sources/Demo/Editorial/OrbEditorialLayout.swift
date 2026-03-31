@@ -2,6 +2,37 @@ import CoreText
 import Foundation
 import Pretext
 
+enum OrbEditorialPresentation: Equatable {
+    case standard
+    case watch
+
+    var bodyStartCursor: LayoutCursor {
+        switch self {
+        case .standard:
+            OrbEditorialAssets.bodyStartCursor
+        case .watch:
+            .start
+        }
+    }
+
+    var bottomChromeHeight: Double {
+        switch self {
+        case .standard:
+            OrbEditorialMetrics.statsBarHeight
+        case .watch:
+            0
+        }
+    }
+
+    var includesDropCap: Bool {
+        self == .standard
+    }
+
+    var includesPullquotes: Bool {
+        self == .standard
+    }
+}
+
 enum OrbEditorialMetrics {
     static let statsBarHeight = 42.0
     static let minSlotWidth = 50.0
@@ -40,9 +71,32 @@ enum OrbEditorialMetrics {
         bodyFontSize: 15,
         pullquoteFontSize: 16
     )
+    static let watchProfile = OrbEditorialLayoutProfile(
+        cacheKey: "watch",
+        gutter: 22,
+        columnGap: 20,
+        dropCapLines: 2,
+        bodyLineHeight: 19,
+        pullquoteLineHeight: 18,
+        bodyTopGap: 8,
+        bodyBottomInset: 4,
+        headlineLineHeightScale: 0.9,
+        headlineMinSize: 14,
+        headlineMaxSize: 34,
+        headlineMaxHeightFraction: 0.12,
+        bodyFontSize: 12,
+        pullquoteFontSize: 13
+    )
 
-    static func profile(for pageWidth: Double) -> OrbEditorialLayoutProfile {
-        pageWidth <= 640 ? compactProfile : regularProfile
+    static func profile(
+        for pageWidth: Double,
+        presentation: OrbEditorialPresentation = .standard
+    ) -> OrbEditorialLayoutProfile {
+        if presentation == .watch {
+            return watchProfile
+        }
+
+        return pageWidth <= 640 ? compactProfile : regularProfile
     }
 
     static func bodyFontDescriptor(size: Double) -> FontDescriptor {
@@ -264,11 +318,13 @@ func evaluateOrbEditorialLayout(
     pageWidth: Double,
     pageHeight: Double,
     compositionHeight: Double? = nil,
-    orbs: [OrbState]
+    orbs: [OrbState],
+    presentation: OrbEditorialPresentation = .standard
 ) -> OrbEditorialSnapshot {
     let start = CFAbsoluteTimeGetCurrent()
-    let profile = OrbEditorialMetrics.profile(for: pageWidth)
+    let profile = OrbEditorialMetrics.profile(for: pageWidth, presentation: presentation)
     let gutter = profile.gutter
+    let bottomChromeHeight = presentation.bottomChromeHeight
     let resolvedCompositionHeight = min(max(compositionHeight ?? pageHeight, 1), pageHeight)
     let headlineWidth = min(pageWidth - gutter * 2, 1000)
     let headlineMaxHeight = floor(resolvedCompositionHeight * profile.headlineMaxHeightFraction)
@@ -286,9 +342,9 @@ func evaluateOrbEditorialLayout(
     let bodyTop = gutter + headlineHeight + profile.bodyTopGap
     let compositionBodyHeight = max(
         0,
-        resolvedCompositionHeight - bodyTop - OrbEditorialMetrics.statsBarHeight - profile.bodyBottomInset
+        resolvedCompositionHeight - bodyTop - bottomChromeHeight - profile.bodyBottomInset
     )
-    let bodyHeight = max(0, pageHeight - bodyTop - OrbEditorialMetrics.statsBarHeight - profile.bodyBottomInset)
+    let bodyHeight = max(0, pageHeight - bodyTop - bottomChromeHeight - profile.bodyBottomInset)
     let columnCount = orbEditorialColumnCount(for: pageWidth)
     let totalGutter = gutter * 2 + profile.columnGap * Double(columnCount - 1)
     let contentWidth = min(pageWidth, OrbEditorialMetrics.maxContentWidth)
@@ -297,12 +353,16 @@ func evaluateOrbEditorialLayout(
         (pageWidth - (Double(columnCount) * columnWidth + Double(columnCount - 1) * profile.columnGap)) / 2
     )
     let firstColumnX = contentLeft
-    let dropCapRect = WrapRect(
-        x: firstColumnX - 2,
-        y: bodyTop - 2,
-        width: OrbEditorialAssets.dropCapTotalWidth(for: profile),
-        height: Double(profile.dropCapLines) * profile.bodyLineHeight + 2
-    )
+    let dropCapRect = if presentation.includesDropCap {
+        WrapRect(
+            x: firstColumnX - 2,
+            y: bodyTop - 2,
+            width: OrbEditorialAssets.dropCapTotalWidth(for: profile),
+            height: Double(profile.dropCapLines) * profile.bodyLineHeight + 2
+        )
+    } else {
+        WrapRect(x: firstColumnX, y: bodyTop, width: 0, height: 0)
+    }
     let dropCapPosition = WrapPoint(x: firstColumnX, y: bodyTop)
 
     let circleObstacles = orbs.map {
@@ -315,10 +375,14 @@ func evaluateOrbEditorialLayout(
         )
     }
 
-    let placements = [
-        OrbPullquotePlacement(columnIndex: 0, yFraction: 0.48, widthFraction: 0.52, side: .right),
-        OrbPullquotePlacement(columnIndex: min(1, columnCount - 1), yFraction: 0.32, widthFraction: 0.5, side: .left),
-    ]
+    let placements: [OrbPullquotePlacement] = if presentation.includesPullquotes {
+        [
+            OrbPullquotePlacement(columnIndex: 0, yFraction: 0.48, widthFraction: 0.52, side: .right),
+            OrbPullquotePlacement(columnIndex: min(1, columnCount - 1), yFraction: 0.32, widthFraction: 0.5, side: .left),
+        ]
+    } else {
+        []
+    }
 
     var pullquotes: [OrbEditorialPullquoteBlock] = []
     for (index, placement) in placements.enumerated() {
@@ -360,12 +424,12 @@ func evaluateOrbEditorialLayout(
     }
 
     var bodyLines: [PositionedLine] = []
-    var cursor = OrbEditorialAssets.bodyStartCursor
+    var cursor = presentation.bodyStartCursor
     var preparedBody = OrbEditorialAssets.preparedBody(for: profile)
     for columnIndex in 0..<columnCount {
         let columnX = contentLeft + Double(columnIndex) * (columnWidth + profile.columnGap)
         var rectObstacles: [WrapRect] = []
-        if columnIndex == 0 {
+        if columnIndex == 0, presentation.includesDropCap {
             rectObstacles.append(dropCapRect)
         }
         rectObstacles.append(contentsOf: pullquotes.filter { $0.columnIndex == columnIndex }.map(\.rect))
@@ -414,9 +478,10 @@ func evaluateOrbEditorialLayout(
 func orbEditorialPhoneContentHeight(
     viewportWidth: Double,
     viewportHeight: Double,
-    orbs: [OrbState]
+    orbs: [OrbState],
+    presentation: OrbEditorialPresentation = .standard
 ) -> Double {
-    let profile = OrbEditorialMetrics.profile(for: viewportWidth)
+    let profile = OrbEditorialMetrics.profile(for: viewportWidth, presentation: presentation)
     var pageHeight = max(viewportHeight * 2, 2000)
 
     for _ in 0..<8 {
@@ -424,9 +489,10 @@ func orbEditorialPhoneContentHeight(
             pageWidth: viewportWidth,
             pageHeight: pageHeight,
             compositionHeight: viewportHeight,
-            orbs: orbs
+            orbs: orbs,
+            presentation: presentation
         )
-        let paddedBottom = snapshot.contentBottom + OrbEditorialMetrics.statsBarHeight + profile.gutter
+        let paddedBottom = snapshot.contentBottom + presentation.bottomChromeHeight + profile.gutter
 
         if snapshot.bodyExhausted {
             return max(pageHeight, paddedBottom)

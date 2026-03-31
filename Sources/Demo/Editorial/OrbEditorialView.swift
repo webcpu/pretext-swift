@@ -35,6 +35,58 @@ private enum OrbPointerCursor: Equatable {
     }
 }
 
+struct OrbEditorialDisplayMode: Equatable {
+    var platform: DemoNavigationPlatform
+    var presentation: OrbEditorialPresentation
+    var isCompactLayout: Bool
+    var showsHint: Bool
+    var showsStatsBar: Bool
+    var showsDropCap: Bool
+    var showsPullquotes: Bool
+    var hintPauseVerb: String
+}
+
+func resolveOrbEditorialDisplayMode(
+    isCompactWidth: Bool?,
+    platform: DemoNavigationPlatform = .current,
+    forceWatchPresentation: Bool = false
+) -> OrbEditorialDisplayMode {
+    let resolvedPlatform: DemoNavigationPlatform = forceWatchPresentation ? .watchOS : platform
+    let presentation: OrbEditorialPresentation = resolvedPlatform == .watchOS ? .watch : .standard
+    let isCompactLayout = resolvedPlatform == .watchOS || isCompactWidth == true
+    let hidesWatchChrome = presentation == .watch
+
+    return OrbEditorialDisplayMode(
+        platform: resolvedPlatform,
+        presentation: presentation,
+        isCompactLayout: isCompactLayout,
+        showsHint: !hidesWatchChrome,
+        showsStatsBar: !hidesWatchChrome,
+        showsDropCap: !hidesWatchChrome,
+        showsPullquotes: !hidesWatchChrome,
+        hintPauseVerb: isCompactLayout ? "Tap" : "Click"
+    )
+}
+
+func orbEditorialUsesCompactLayout(
+    isCompactWidth: Bool?,
+    platform: DemoNavigationPlatform = .current
+) -> Bool {
+    resolveOrbEditorialDisplayMode(
+        isCompactWidth: isCompactWidth,
+        platform: platform
+    )
+    .isCompactLayout
+}
+
+private func orbEditorialForceWatchPresentation() -> Bool {
+    #if os(watchOS)
+    true
+    #else
+    false
+    #endif
+}
+
 private struct OrbSceneState {
     var orbs: [OrbState] = []
     var drag: OrbDragState?
@@ -43,15 +95,20 @@ private struct OrbSceneState {
     var fpsTimestamps: [TimeInterval] = []
     var fpsDisplay = 60
 
-    mutating func ensureInitialized(pageSize: CGSize) {
+    mutating func ensureInitialized(pageSize: CGSize, platform: DemoNavigationPlatform) {
         guard orbs.isEmpty, pageSize.width > 0, pageSize.height > 0 else {
             return
         }
-        orbs = makeInitialOrbStates(pageSize: pageSize)
+        orbs = makeInitialOrbStates(pageSize: pageSize, platform: platform)
     }
 
-    mutating func advance(now: TimeInterval, pageSize: CGSize) {
-        ensureInitialized(pageSize: pageSize)
+    mutating func advance(
+        now: TimeInterval,
+        pageSize: CGSize,
+        bottomInset: Double,
+        platform: DemoNavigationPlatform
+    ) {
+        ensureInitialized(pageSize: pageSize, platform: platform)
         guard !orbs.isEmpty else {
             return
         }
@@ -68,8 +125,12 @@ private struct OrbSceneState {
             &orbs,
             pageSize: pageSize,
             dt: dt,
-            topInset: OrbEditorialMetrics.profile(for: pageSize.width).gutter * 0.5,
-            bottomInset: OrbEditorialMetrics.statsBarHeight
+            topInset: OrbEditorialMetrics.profile(
+                for: pageSize.width,
+                presentation: platform == .watchOS ? .watch : .standard
+            )
+            .gutter * 0.5,
+            bottomInset: bottomInset
         )
         updateFPS(now: now)
     }
@@ -78,8 +139,8 @@ private struct OrbSceneState {
         pointerLocation = location
     }
 
-    mutating func beginDrag(at point: CGPoint, pageSize: CGSize) {
-        ensureInitialized(pageSize: pageSize)
+    mutating func beginDrag(at point: CGPoint, pageSize: CGSize, platform: DemoNavigationPlatform) {
+        ensureInitialized(pageSize: pageSize, platform: platform)
         guard drag == nil, let orbIndex = hitTestOrb(at: point, in: orbs) else {
             return
         }
@@ -121,8 +182,8 @@ private struct OrbSceneState {
         self.drag = nil
     }
 
-    mutating func togglePause(at point: CGPoint, pageSize: CGSize) {
-        ensureInitialized(pageSize: pageSize)
+    mutating func togglePause(at point: CGPoint, pageSize: CGSize, platform: DemoNavigationPlatform) {
+        ensureInitialized(pageSize: pageSize, platform: platform)
         pointerLocation = point
         guard let orbIndex = hitTestOrb(at: point, in: orbs) else {
             return
@@ -258,14 +319,23 @@ struct OrbEditorialView: View {
             TimelineView(.animation(paused: false)) { timeline in
                 let now = timeline.date.timeIntervalSinceReferenceDate
                 let viewportSize = proxy.size
-                let displayOrbs = scene.orbs.isEmpty ? makeInitialOrbStates(pageSize: viewportSize) : scene.orbs
-                let isPhoneLayout = horizontalSizeClass == .compact
+                let displayMode = resolveOrbEditorialDisplayMode(
+                    isCompactWidth: horizontalSizeClass.map { $0 == .compact },
+                    platform: .current,
+                    forceWatchPresentation: orbEditorialForceWatchPresentation()
+                )
+                let platform = displayMode.platform
+                let presentation = displayMode.presentation
+                let displayOrbs = scene.orbs.isEmpty
+                    ? makeInitialOrbStates(pageSize: viewportSize, platform: platform)
+                    : scene.orbs
                 let pageHeight = max(Double(viewportSize.height), 1)
                 let snapshot = evaluateOrbEditorialLayout(
                     pageWidth: max(Double(viewportSize.width), 1),
                     pageHeight: pageHeight,
-                    compositionHeight: isPhoneLayout ? max(Double(viewportSize.height), 1) : nil,
-                    orbs: displayOrbs
+                    compositionHeight: displayMode.isCompactLayout ? max(Double(viewportSize.height), 1) : nil,
+                    orbs: displayOrbs,
+                    presentation: presentation
                 )
                 let cursor: OrbPointerCursor = if scene.drag != nil {
                     .grabbing
@@ -276,13 +346,18 @@ struct OrbEditorialView: View {
                 }
 
                 Group {
-                    if isPhoneLayout {
+                    if displayMode.isCompactLayout {
                         phoneLayout(
                             viewportSize: viewportSize,
                             snapshot: snapshot,
                             displayOrbs: displayOrbs,
                             cursor: cursor,
-                            hintPauseVerb: "Tap"
+                            platform: platform,
+                            hintPauseVerb: displayMode.hintPauseVerb,
+                            showsHint: displayMode.showsHint,
+                            showsStatsBar: displayMode.showsStatsBar,
+                            showsDropCap: displayMode.showsDropCap,
+                            showsPullquotes: displayMode.showsPullquotes
                         )
                     } else {
                         desktopLayout(
@@ -290,13 +365,19 @@ struct OrbEditorialView: View {
                             snapshot: snapshot,
                             displayOrbs: displayOrbs,
                             cursor: cursor,
-                            hintPauseVerb: "Click"
+                            platform: platform,
+                            hintPauseVerb: displayMode.hintPauseVerb
                         )
                     }
                 }
                 .background(OrbEditorialPalette.backgroundOuter)
                 .onChange(of: now, initial: true) { _, newTime in
-                    scene.advance(now: newTime, pageSize: viewportSize)
+                    scene.advance(
+                        now: newTime,
+                        pageSize: viewportSize,
+                        bottomInset: presentation.bottomChromeHeight,
+                        platform: platform
+                    )
                 }
             }
         }
@@ -310,6 +391,7 @@ struct OrbEditorialView: View {
         snapshot: OrbEditorialSnapshot,
         displayOrbs: [OrbState],
         cursor: OrbPointerCursor,
+        platform: DemoNavigationPlatform,
         hintPauseVerb: String
     ) -> some View {
         ZStack(alignment: .topLeading) {
@@ -321,7 +403,7 @@ struct OrbEditorialView: View {
             )
             .frame(width: pageSize.width, height: pageSize.height)
             .contentShape(Rectangle())
-            .gesture(orbDragGesture(in: pageSize))
+            .gesture(orbDragGesture(in: pageSize, platform: platform))
             .demoContinuousHover { location in
                 scene.setPointerLocation(location)
             }
@@ -353,7 +435,12 @@ struct OrbEditorialView: View {
         snapshot: OrbEditorialSnapshot,
         displayOrbs: [OrbState],
         cursor: OrbPointerCursor,
-        hintPauseVerb: String
+        platform: DemoNavigationPlatform,
+        hintPauseVerb: String,
+        showsHint: Bool,
+        showsStatsBar: Bool,
+        showsDropCap: Bool,
+        showsPullquotes: Bool
     ) -> some View {
         ZStack(alignment: .topLeading) {
             orbCanvas(
@@ -364,37 +451,49 @@ struct OrbEditorialView: View {
             )
             .frame(width: viewportSize.width, height: viewportSize.height)
             .contentShape(Rectangle())
-            .simultaneousGesture(orbTapGesture(in: viewportSize))
-            .simultaneousGesture(orbDragGesture(in: viewportSize))
+            .simultaneousGesture(orbTapGesture(in: viewportSize, platform: platform))
+            .simultaneousGesture(orbDragGesture(in: viewportSize, platform: platform))
             .demoContinuousHover { location in
                 scene.setPointerLocation(location)
             }
             .demoPointerCursor(cursor.demoCursor)
 
-            phoneStaticTextLayer(snapshot: snapshot)
+            phoneStaticTextLayer(
+                snapshot: snapshot,
+                showsDropCap: showsDropCap,
+                showsPullquotes: showsPullquotes
+            )
 
-            OrbHintPillView(pauseVerb: hintPauseVerb)
-                .frame(maxWidth: .infinity, alignment: .center)
-                .padding(.top, 40)
-                .zIndex(2)
-
-            VStack {
-                Spacer(minLength: 0)
-                OrbStatsBarView(
-                    lineCount: snapshot.bodyLines.count,
-                    reflowMilliseconds: snapshot.reflowMilliseconds,
-                    fps: scene.fpsDisplay,
-                    columnCount: snapshot.columnCount
-                )
+            if showsHint {
+                OrbHintPillView(pauseVerb: hintPauseVerb)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.top, 40)
+                    .zIndex(2)
             }
-            .zIndex(2)
+
+            if showsStatsBar {
+                VStack {
+                    Spacer(minLength: 0)
+                    OrbStatsBarView(
+                        lineCount: snapshot.bodyLines.count,
+                        reflowMilliseconds: snapshot.reflowMilliseconds,
+                        fps: scene.fpsDisplay,
+                        columnCount: snapshot.columnCount
+                    )
+                }
+                .zIndex(2)
+            }
         }
         .frame(width: viewportSize.width, height: viewportSize.height)
         .clipped()
     }
 
     @ViewBuilder
-    private func phoneStaticTextLayer(snapshot: OrbEditorialSnapshot) -> some View {
+    private func phoneStaticTextLayer(
+        snapshot: OrbEditorialSnapshot,
+        showsDropCap: Bool,
+        showsPullquotes: Bool
+    ) -> some View {
         ZStack(alignment: .topLeading) {
             ForEach(Array(snapshot.headlineLines.enumerated()), id: \.offset) { _, line in
                 Text(line.text)
@@ -405,18 +504,22 @@ struct OrbEditorialView: View {
                     .offset(x: line.x, y: line.y)
             }
 
-            Text(String(OrbEditorialText.body.prefix(1)))
-                .font(Font(OrbEditorialMetrics.dropCapFont(size: snapshot.dropCapSize)))
-                .foregroundStyle(OrbEditorialPalette.dropCap)
-                .frame(width: snapshot.dropCapRect.width, height: snapshot.dropCapRect.height, alignment: .topLeading)
-                .offset(x: snapshot.dropCapPosition.x, y: snapshot.dropCapPosition.y)
+            if showsDropCap {
+                Text(String(OrbEditorialText.body.prefix(1)))
+                    .font(Font(OrbEditorialMetrics.dropCapFont(size: snapshot.dropCapSize)))
+                    .foregroundStyle(OrbEditorialPalette.dropCap)
+                    .frame(width: snapshot.dropCapRect.width, height: snapshot.dropCapRect.height, alignment: .topLeading)
+                    .offset(x: snapshot.dropCapPosition.x, y: snapshot.dropCapPosition.y)
+            }
 
-            ForEach(Array(snapshot.pullquotes.enumerated()), id: \.offset) { _, pullquote in
-                OrbPullquoteStaticView(
-                    pullquote: pullquote,
-                    fontSize: snapshot.pullquoteFontSize,
-                    lineHeight: snapshot.pullquoteLineHeight
-                )
+            if showsPullquotes {
+                ForEach(Array(snapshot.pullquotes.enumerated()), id: \.offset) { _, pullquote in
+                    OrbPullquoteStaticView(
+                        pullquote: pullquote,
+                        fontSize: snapshot.pullquoteFontSize,
+                        lineHeight: snapshot.pullquoteLineHeight
+                    )
+                }
             }
         }
         .allowsHitTesting(false)
@@ -483,18 +586,25 @@ struct OrbEditorialView: View {
         .frame(width: canvasSize.width, height: canvasSize.height)
     }
 
-    private func orbTapGesture(in pageSize: CGSize) -> some Gesture {
+    private func orbTapGesture(
+        in pageSize: CGSize,
+        platform: DemoNavigationPlatform
+    ) -> some Gesture {
         SpatialTapGesture(coordinateSpace: .local)
             .onEnded { value in
-                scene.togglePause(at: value.location, pageSize: pageSize)
+                scene.togglePause(at: value.location, pageSize: pageSize, platform: platform)
             }
     }
 
-    private func orbDragGesture(in pageSize: CGSize, minimumDistance: CGFloat = 0) -> some Gesture {
+    private func orbDragGesture(
+        in pageSize: CGSize,
+        platform: DemoNavigationPlatform,
+        minimumDistance: CGFloat = 0
+    ) -> some Gesture {
         DragGesture(minimumDistance: minimumDistance, coordinateSpace: .local)
             .onChanged { value in
                 if scene.drag == nil {
-                    scene.beginDrag(at: value.startLocation, pageSize: pageSize)
+                    scene.beginDrag(at: value.startLocation, pageSize: pageSize, platform: platform)
                 }
                 guard scene.drag != nil else {
                     return

@@ -42,13 +42,41 @@ private let orbDefinitions: [OrbDefinition] = [
     OrbDefinition(fx: 0.86, fy: 0.18, radius: 65, vx: -13, vy: 19, color: RGBColor(red: 150 / 255, green: 100 / 255, blue: 220 / 255)),
 ]
 
-private func orbRadiusScale(for pageSize: CGSize) -> Double {
-    min(pageSize.width, pageSize.height) <= 640 ? (2.0 / 3.0) : 1.0
+private func visibleOrbDefinitions(
+    for platform: DemoNavigationPlatform
+) -> [(index: Int, definition: OrbDefinition)] {
+    let indexedDefinitions = orbDefinitions.enumerated().map { (index: $0.offset, definition: $0.element) }
+    guard platform == .watchOS else {
+        return indexedDefinitions
+    }
+
+    let hiddenIndices = Set(
+        indexedDefinitions
+            .sorted { $0.definition.radius > $1.definition.radius }
+            .prefix(2)
+            .map(\.index)
+    )
+
+    return indexedDefinitions.filter { !hiddenIndices.contains($0.index) }
 }
 
-func makeInitialOrbStates(pageSize: CGSize) -> [OrbState] {
-    let radiusScale = orbRadiusScale(for: pageSize)
-    return orbDefinitions.enumerated().map { index, definition in
+private func orbRadiusScale(
+    for pageSize: CGSize,
+    platform: DemoNavigationPlatform
+) -> Double {
+    if platform == .watchOS {
+        return 1.0 / 3.0
+    }
+
+    return min(pageSize.width, pageSize.height) <= 640 ? (2.0 / 3.0) : 1.0
+}
+
+func makeInitialOrbStates(
+    pageSize: CGSize,
+    platform: DemoNavigationPlatform = .current
+) -> [OrbState] {
+    let radiusScale = orbRadiusScale(for: pageSize, platform: platform)
+    return visibleOrbDefinitions(for: platform).map { index, definition in
         OrbState(
             id: index,
             x: definition.fx * pageSize.width,
