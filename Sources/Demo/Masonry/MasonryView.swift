@@ -23,16 +23,89 @@ enum MasonryEngine: String, CaseIterable {
     case coreText = "Core Text"
 }
 
+func masonryUsesCompactStatsBar(
+    platform: DemoNavigationPlatform = .current
+) -> Bool {
+    platform == .watchOS
+}
+
+func masonryStatsBarHeight(
+    platform: DemoNavigationPlatform = .current
+) -> Double {
+    masonryUsesCompactStatsBar(platform: platform) ? 56 : 36
+}
+
+func masonryStatsBarHorizontalPadding(
+    platform: DemoNavigationPlatform = .current
+) -> Double {
+    masonryUsesCompactStatsBar(platform: platform) ? 12 : 18
+}
+
+func masonryUsesSplitWatchControlRows(
+    platform: DemoNavigationPlatform = .current
+) -> Bool {
+    masonryUsesCompactStatsBar(platform: platform)
+}
+
+func masonryContentBottomInset(
+    platform: DemoNavigationPlatform = .current
+) -> Double {
+    masonryUsesCompactStatsBar(platform: platform) ? masonryStatsBarHeight(platform: platform) : 0
+}
+
+func masonryStatsMetricLabels(
+    platform: DemoNavigationPlatform = .current
+) -> [String] {
+    switch platform {
+    case .watchOS:
+        ["Cards", "Cols", "Layout", "Budget"]
+    case .ios, .macOS:
+        ["Cards", "Columns", "Engine", "Layout", "Budget"]
+    }
+}
+
+struct MasonryWatchEngineOption: Equatable, Sendable {
+    let engine: MasonryEngine
+    let title: String
+    let isActive: Bool
+}
+
+func masonryWatchEngineOptions(current: MasonryEngine) -> [MasonryWatchEngineOption] {
+    MasonryEngine.allCases.map { engine in
+        MasonryWatchEngineOption(
+            engine: engine,
+            title: engine == .coreText ? "CoreText" : engine.rawValue,
+            isActive: engine == current
+        )
+    }
+}
+
+func masonryRenderedCardIndices(
+    from positionedCards: [PositionedCard],
+    scrollOffset: Double,
+    viewportHeight: Double
+) -> [Int] {
+    visibleCardIndices(
+        from: positionedCards,
+        scrollOffset: scrollOffset,
+        viewportHeight: viewportHeight
+    )
+}
+
 struct MasonryView: View {
     @State private var engine: MasonryEngine = .pretext
     @State private var passes: Int = 1
     @State private var scrollOffset: Double = 0
-    @State private var layoutMs: Double = 0
 
     var body: some View {
         GeometryReader { proxy in
+            let platform = DemoNavigationPlatform.current
             let viewportWidth = Double(proxy.size.width)
-            let columns = computeMasonryColumns(viewportWidth: viewportWidth)
+            let viewportHeight = Double(proxy.size.height)
+            let columns = computeMasonryColumns(
+                viewportWidth: viewportWidth,
+                platform: platform
+            )
 
             // Recompute heights every time scrollOffset or engine changes.
             // Pretext handles this in <1ms; Core Text takes ~26ms and will stutter.
@@ -44,48 +117,77 @@ struct MasonryView: View {
             )
             let layoutResult = computeMasonryLayout(
                 viewportWidth: viewportWidth,
-                cardHeights: timed.heights
+                cardHeights: timed.heights,
+                platform: platform
+            )
+            let renderedCardIndices = masonryRenderedCardIndices(
+                from: layoutResult.positionedCards,
+                scrollOffset: scrollOffset,
+                viewportHeight: viewportHeight
             )
 
             ZStack(alignment: .bottom) {
-                ScrollView(.vertical) {
-                    ZStack(alignment: .topLeading) {
-                        Color.clear
-                            .frame(height: layoutResult.contentHeight)
-                            .background(
-                                GeometryReader { scrollProxy in
-                                    Color.clear.preference(
-                                        key: ScrollOffsetKey.self,
-                                        value: -scrollProxy.frame(in: .named("masonry")).minY
-                                    )
-                                }
-                            )
-
-                        ForEach(0..<layoutResult.positionedCards.count, id: \.self) { i in
-                            let card = layoutResult.positionedCards[i]
-                            cardView(card, colWidth: layoutResult.colWidth)
-                        }
-                    }
-                }
-                .coordinateSpace(name: "masonry")
-                .onPreferenceChange(ScrollOffsetKey.self) { value in
-                    scrollOffset = value
-                    layoutMs = timed.ms
-                }
-
-                MasonryStatsBar(
-                    cardCount: MasonryData.texts.count,
+                masonryScrollView(
+                    layoutResult: layoutResult,
+                    renderedCardIndices: renderedCardIndices,
+                    bottomInset: masonryContentBottomInset(platform: platform)
+                )
+                statsBar(
+                    platform: platform,
                     columnCount: layoutResult.colCount,
-                    engine: engine,
-                    passes: passes,
-                    layoutMs: layoutMs,
-                    onToggle: { engine = engine == .pretext ? .coreText : .pretext },
-                    onPassesChanged: { passes = $0 }
+                    layoutMs: timed.ms
                 )
             }
         }
         .background(MasonryPalette.background)
         .preferredColorScheme(.light)
+    }
+
+    private func masonryScrollView(
+        layoutResult: MasonryLayoutResult,
+        renderedCardIndices: [Int],
+        bottomInset: Double
+    ) -> some View {
+        ScrollView(.vertical) {
+            ZStack(alignment: .topLeading) {
+                Color.clear
+                    .frame(height: layoutResult.contentHeight + bottomInset)
+                    .background(
+                        GeometryReader { scrollProxy in
+                            Color.clear.preference(
+                                key: ScrollOffsetKey.self,
+                                value: -scrollProxy.frame(in: .named("masonry")).minY
+                            )
+                        }
+                    )
+
+                ForEach(renderedCardIndices, id: \.self) { i in
+                    let card = layoutResult.positionedCards[i]
+                    cardView(card, colWidth: layoutResult.colWidth)
+                }
+            }
+        }
+        .coordinateSpace(.named("masonry"))
+        .onPreferenceChange(ScrollOffsetKey.self) { value in
+            scrollOffset = value
+        }
+    }
+
+    private func statsBar(
+        platform: DemoNavigationPlatform,
+        columnCount: Int,
+        layoutMs: Double
+    ) -> some View {
+        MasonryStatsBar(
+            cardCount: MasonryData.texts.count,
+            columnCount: columnCount,
+            engine: engine,
+            passes: passes,
+            layoutMs: layoutMs,
+            platform: platform,
+            onToggle: { engine = engine == .pretext ? .coreText : .pretext },
+            onPassesChanged: { passes = $0 }
+        )
     }
 
     private func cardView(_ card: PositionedCard, colWidth: Double) -> some View {
@@ -160,25 +262,70 @@ private func timedCardHeights(
 
 private let passOptions = [1, 2, 5, 10]
 
+private struct MasonryStatItemView: View {
+    let label: String
+    let value: String
+    let stacked: Bool
+    let compact: Bool
+
+    private var labelFont: Font {
+        FontDescriptor(
+            familyName: "Helvetica Neue",
+            size: compact ? 7 : 10
+        ).makeDisplayFont()
+    }
+
+    private var valueFont: Font {
+        FontDescriptor(
+            familyName: "Helvetica Neue",
+            size: compact ? 9 : 12,
+            weightValue: 0.23
+        ).makeDisplayFont()
+    }
+
+    var body: some View {
+        Group {
+            if stacked {
+                VStack(alignment: .leading, spacing: 1) {
+                    statLabel
+                    statValue
+                }
+            } else {
+                HStack(spacing: 6) {
+                    statLabel
+                    statValue
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var statLabel: some View {
+        Text(label.uppercased())
+            .font(labelFont)
+            .tracking(0.5)
+            .foregroundStyle(.black.opacity(0.35))
+    }
+
+    private var statValue: some View {
+        Text(value)
+            .font(valueFont)
+            .foregroundStyle(.black.opacity(0.7))
+    }
+}
+
 private struct MasonryStatsBar: View {
     let cardCount: Int
     let columnCount: Int
     let engine: MasonryEngine
     let passes: Int
     let layoutMs: Double
+    let platform: DemoNavigationPlatform
     let onToggle: () -> Void
     let onPassesChanged: (Int) -> Void
 
     private static let frameBudgetMs = 16.67 // 60fps
     private static let barMaxMs = 40.0 // full bar width
-
-    private static let labelFont = FontDescriptor(
-        familyName: "Helvetica Neue", size: 10
-    ).makeDisplayFont()
-
-    private static let valueFont = FontDescriptor(
-        familyName: "Helvetica Neue", size: 12, weightValue: 0.23
-    ).makeDisplayFont()
 
     private var budgetFraction: Double {
         min(layoutMs / Self.barMaxMs, 1.0)
@@ -210,56 +357,80 @@ private struct MasonryStatsBar: View {
             }
             .frame(height: 4)
 
-            HStack(spacing: 18) {
-                statItem("Cards", value: "\(cardCount)")
-                statItem("Columns", value: "\(columnCount)")
-                statItem("Engine", value: engine.rawValue)
-                statItem("Layout", value: String(format: "%.1fms", layoutMs))
-                statItem("Budget", value: String(
-                    format: "%.0f%%",
-                    layoutMs / Self.frameBudgetMs * 100
-                ))
-
-                Button(action: onToggle) {
-                    Text("Switch to \(engine == .pretext ? "Core Text" : "Pretext")")
-                        .font(Self.valueFont)
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 4)
-                        .background(
-                            Capsule().fill(Color.black.opacity(0.6))
-                        )
-                }
-                .buttonStyle(.plain)
-
-                HStack(spacing: 4) {
-                    Text("PASSES")
-                        .font(Self.labelFont)
-                        .tracking(0.5)
-                        .foregroundStyle(.black.opacity(0.35))
-                    ForEach(passOptions, id: \.self) { n in
-                        Button(action: { onPassesChanged(n) }) {
-                            Text("\(n)x")
-                                .font(Self.valueFont)
-                                .foregroundStyle(passes == n ? .white : .black.opacity(0.5))
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 3)
-                                .background(
-                                    Capsule().fill(
-                                        passes == n
-                                            ? Color.black.opacity(0.6)
-                                            : Color.black.opacity(0.08)
-                                    )
-                                )
+            if masonryUsesCompactStatsBar(platform: platform) {
+                VStack(spacing: 2) {
+                    HStack(spacing: 8) {
+                        ForEach(Array(compactStats.enumerated()), id: \.offset) { _, stat in
+                            MasonryStatItemView(
+                                label: stat.label,
+                                value: stat.value,
+                                stacked: false,
+                                compact: true
+                            )
                         }
-                        .buttonStyle(.plain)
                     }
-                }
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
-                Spacer(minLength: 0)
+                    if masonryUsesSplitWatchControlRows(platform: platform) {
+                        HStack(spacing: 4) {
+                            Spacer(minLength: 0)
+                            ForEach(masonryWatchEngineOptions(current: engine), id: \.engine) { option in
+                                watchEngineButton(option, compact: true)
+                            }
+                            Spacer(minLength: 0)
+                        }
+                    }
+
+                    HStack(spacing: 3) {
+                        Spacer(minLength: 0)
+                        ForEach(passOptions, id: \.self) { n in
+                            passButton(n, compact: true)
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .center)
+                }
+                .padding(.horizontal, masonryStatsBarHorizontalPadding(platform: platform))
+                .padding(.vertical, 2)
+                .frame(minHeight: masonryStatsBarHeight(platform: platform) - 4)
+            } else {
+                HStack(spacing: 18) {
+                    ForEach(Array(standardStats.enumerated()), id: \.offset) { _, stat in
+                        MasonryStatItemView(
+                            label: stat.label,
+                            value: stat.value,
+                            stacked: false,
+                            compact: false
+                        )
+                    }
+
+                    Button(action: onToggle) {
+                        Text("Switch to \(engine == .pretext ? "Core Text" : "Pretext")")
+                            .font(controlFont(compact: false))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 4)
+                            .background(
+                                Capsule().fill(Color.black.opacity(0.6))
+                            )
+                    }
+                    .buttonStyle(.plain)
+
+                    HStack(spacing: 4) {
+                        Text("PASSES")
+                            .font(labelFont(compact: false))
+                            .tracking(0.5)
+                            .foregroundStyle(.black.opacity(0.35))
+                        ForEach(passOptions, id: \.self) { n in
+                            passButton(n, compact: false)
+                        }
+                    }
+
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 18)
+                .frame(height: masonryStatsBarHeight(platform: platform))
             }
-            .padding(.horizontal, 18)
-            .frame(height: 36)
         }
         .background(Color.white.opacity(0.92))
         .overlay(alignment: .top) {
@@ -269,15 +440,97 @@ private struct MasonryStatsBar: View {
         }
     }
 
-    private func statItem(_ label: String, value: String) -> some View {
-        HStack(spacing: 6) {
-            Text(label.uppercased())
-                .font(Self.labelFont)
-                .tracking(0.5)
-                .foregroundStyle(.black.opacity(0.35))
-            Text(value)
-                .font(Self.valueFont)
-                .foregroundStyle(.black.opacity(0.7))
+    private var formattedLayoutMs: String {
+        String(format: "%.1fms", layoutMs)
+    }
+
+    private var formattedBudget: String {
+        String(format: "%.0f%%", layoutMs / Self.frameBudgetMs * 100)
+    }
+
+    private var compactStats: [(label: String, value: String)] {
+        zip(
+            masonryStatsMetricLabels(platform: platform),
+            [
+                "\(cardCount)",
+                "\(columnCount)",
+                formattedLayoutMs,
+                formattedBudget,
+            ]
+        )
+        .map { (label: $0.0, value: $0.1) }
+    }
+
+    private var standardStats: [(label: String, value: String)] {
+        zip(
+            masonryStatsMetricLabels(platform: platform),
+            [
+                "\(cardCount)",
+                "\(columnCount)",
+                engine.rawValue,
+                formattedLayoutMs,
+                formattedBudget,
+            ]
+        )
+        .map { (label: $0.0, value: $0.1) }
+    }
+
+    private func passButton(_ passesOption: Int, compact: Bool) -> some View {
+        Button(action: { onPassesChanged(passesOption) }) {
+            Text("\(passesOption)x")
+                .font(controlFont(compact: compact))
+                .foregroundStyle(passes == passesOption ? .white : .black.opacity(0.5))
+                .padding(.horizontal, compact ? 3 : 8)
+                .padding(.vertical, compact ? 2 : 3)
+                .background(
+                    Capsule().fill(
+                        passes == passesOption
+                            ? Color.black.opacity(0.6)
+                            : Color.black.opacity(0.08)
+                    )
+                )
         }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private func watchEngineButton(_ option: MasonryWatchEngineOption, compact: Bool) -> some View {
+        if option.isActive {
+            Text(option.title)
+                .font(controlFont(compact: compact))
+                .foregroundStyle(.white)
+                .padding(.horizontal, compact ? 6 : 12)
+                .padding(.vertical, compact ? 2 : 4)
+                .background(
+                    Capsule().fill(Color.black.opacity(0.6))
+                )
+        } else {
+            Button(action: onToggle) {
+                Text(option.title)
+                    .font(controlFont(compact: compact))
+                    .foregroundStyle(.black.opacity(0.65))
+                    .padding(.horizontal, compact ? 6 : 12)
+                    .padding(.vertical, compact ? 2 : 4)
+                    .background(
+                        Capsule().fill(Color.black.opacity(0.08))
+                    )
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private func labelFont(compact: Bool) -> Font {
+        FontDescriptor(
+            familyName: "Helvetica Neue",
+            size: compact ? 9 : 10
+        ).makeDisplayFont()
+    }
+
+    private func controlFont(compact: Bool) -> Font {
+        FontDescriptor(
+            familyName: "Helvetica Neue",
+            size: compact ? 8 : 12,
+            weightValue: 0.23
+        ).makeDisplayFont()
     }
 }

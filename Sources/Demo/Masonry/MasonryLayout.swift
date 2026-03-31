@@ -54,14 +54,33 @@ struct MasonryColumns: Sendable {
     var offsetLeft: Double
 }
 
-func computeMasonryColumns(viewportWidth: Double) -> MasonryColumns {
+func masonryHorizontalPadding(
+    platform: DemoNavigationPlatform = .current
+) -> Double {
+    platform == .watchOS ? 4 : MasonryMetrics.gap
+}
+
+func computeMasonryColumns(
+    viewportWidth: Double,
+    platform: DemoNavigationPlatform = .current
+) -> MasonryColumns {
     let gap = MasonryMetrics.gap
     let colCount: Int
     let colWidth: Double
 
+    if platform == .watchOS {
+        let horizontalPadding = masonryHorizontalPadding(platform: platform)
+        return MasonryColumns(
+            colCount: 1,
+            colWidth: max(0, viewportWidth - horizontalPadding * 2),
+            offsetLeft: horizontalPadding
+        )
+    }
+
     if viewportWidth <= MasonryMetrics.singleColumnMaxViewportWidth {
+        let horizontalPadding = masonryHorizontalPadding(platform: platform)
         colCount = 1
-        colWidth = min(MasonryMetrics.maxColWidth, viewportWidth - gap * 2)
+        colWidth = min(MasonryMetrics.maxColWidth, viewportWidth - horizontalPadding * 2)
     } else {
         let minColWidth = 100 + viewportWidth * 0.1
         colCount = max(2, Int(floor((viewportWidth + gap) / (minColWidth + gap))))
@@ -79,10 +98,14 @@ func computeMasonryColumns(viewportWidth: Double) -> MasonryColumns {
 
 func computeMasonryLayout(
     viewportWidth: Double,
-    cardHeights: [Double]
+    cardHeights: [Double],
+    platform: DemoNavigationPlatform = .current
 ) -> MasonryLayoutResult {
     let gap = MasonryMetrics.gap
-    let columns = computeMasonryColumns(viewportWidth: viewportWidth)
+    let columns = computeMasonryColumns(
+        viewportWidth: viewportWidth,
+        platform: platform
+    )
 
     var colHeights = [Double](repeating: gap, count: columns.colCount)
     var positionedCards: [PositionedCard] = []

@@ -26,6 +26,18 @@ final class MasonryLayoutTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(columns.colCount, 2)
     }
 
+    func testWatchAlwaysUsesSingleColumn() {
+        let columns = computeMasonryColumns(viewportWidth: 800, platform: .watchOS)
+        XCTAssertEqual(columns.colCount, 1)
+    }
+
+    func testWatchUsesFourPointHorizontalPadding() {
+        let viewportWidth = 200.0
+        let columns = computeMasonryColumns(viewportWidth: viewportWidth, platform: .watchOS)
+        XCTAssertEqual(columns.offsetLeft, 4, accuracy: 0.01)
+        XCTAssertEqual(columns.colWidth, viewportWidth - 8, accuracy: 0.01)
+    }
+
     func testColumnWidthNeverExceedsMax() {
         for width in stride(from: 600.0, through: 3000.0, by: 200) {
             let columns = computeMasonryColumns(viewportWidth: width)
@@ -122,6 +134,23 @@ final class MasonryLayoutTests: XCTestCase {
         XCTAssertEqual(result.positionedCards[1].y, gap, accuracy: 0.01)
     }
 
+    func testWatchLayoutPlacesCardsInSingleLane() {
+        let result = computeMasonryLayout(
+            viewportWidth: 800,
+            cardHeights: [100, 80],
+            platform: .watchOS
+        )
+
+        XCTAssertEqual(result.colCount, 1)
+        XCTAssertEqual(result.positionedCards[0].x, 4, accuracy: 0.01)
+        XCTAssertEqual(result.positionedCards[1].x, 4, accuracy: 0.01)
+        XCTAssertEqual(
+            result.positionedCards[1].y,
+            MasonryMetrics.gap + 100 + MasonryMetrics.gap,
+            accuracy: 0.01
+        )
+    }
+
     // MARK: - Visibility culling
 
     func testVisibleCardsFiltering() {
@@ -161,5 +190,61 @@ final class MasonryLayoutTests: XCTestCase {
         )
 
         XCTAssertEqual(visible, [0, 1])
+    }
+
+    func testMasonryRenderedCardIndicesCullOffscreenCards() {
+        let cards = [
+            PositionedCard(cardIndex: 0, x: 0, y: 0, height: 100),
+            PositionedCard(cardIndex: 1, x: 0, y: 500, height: 100),
+            PositionedCard(cardIndex: 2, x: 0, y: 1000, height: 100),
+            PositionedCard(cardIndex: 3, x: 0, y: 2000, height: 100),
+        ]
+
+        XCTAssertEqual(
+            masonryRenderedCardIndices(
+                from: cards,
+                scrollOffset: 500,
+                viewportHeight: 800
+            ),
+            [1, 2]
+        )
+    }
+
+    func testWatchStatsBarUsesCompactPresentation() {
+        XCTAssertTrue(masonryUsesCompactStatsBar(platform: .watchOS))
+        XCTAssertFalse(masonryUsesCompactStatsBar(platform: .ios))
+        XCTAssertEqual(masonryStatsBarHeight(platform: .watchOS), 56)
+        XCTAssertEqual(masonryStatsBarHeight(platform: .ios), 36)
+        XCTAssertEqual(masonryContentBottomInset(platform: .watchOS), 56)
+        XCTAssertEqual(masonryContentBottomInset(platform: .ios), 0)
+        XCTAssertEqual(masonryStatsBarHorizontalPadding(platform: .watchOS), 12)
+        XCTAssertEqual(masonryStatsBarHorizontalPadding(platform: .ios), 18)
+        XCTAssertTrue(masonryUsesSplitWatchControlRows(platform: .watchOS))
+        XCTAssertFalse(masonryUsesSplitWatchControlRows(platform: .ios))
+        XCTAssertEqual(
+            masonryStatsMetricLabels(platform: .watchOS),
+            ["Cards", "Cols", "Layout", "Budget"]
+        )
+        XCTAssertEqual(
+            masonryStatsMetricLabels(platform: .ios),
+            ["Cards", "Columns", "Engine", "Layout", "Budget"]
+        )
+    }
+
+    func testWatchEngineSelectorShowsBothEnginesAndActiveState() {
+        XCTAssertEqual(
+            masonryWatchEngineOptions(current: .pretext),
+            [
+                MasonryWatchEngineOption(engine: .pretext, title: "Pretext", isActive: true),
+                MasonryWatchEngineOption(engine: .coreText, title: "CoreText", isActive: false),
+            ]
+        )
+        XCTAssertEqual(
+            masonryWatchEngineOptions(current: .coreText),
+            [
+                MasonryWatchEngineOption(engine: .pretext, title: "Pretext", isActive: false),
+                MasonryWatchEngineOption(engine: .coreText, title: "CoreText", isActive: true),
+            ]
+        )
     }
 }
