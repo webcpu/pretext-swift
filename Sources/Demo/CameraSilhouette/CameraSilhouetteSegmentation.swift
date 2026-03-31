@@ -19,23 +19,35 @@ private struct CameraSilhouetteRefinedMask {
     var alpha: [UInt8]
 }
 
+private final class CameraSilhouettePixelBufferBox: @unchecked Sendable {
+    let pixelBuffer: CVPixelBuffer
+
+    init(_ pixelBuffer: CVPixelBuffer) {
+        self.pixelBuffer = pixelBuffer
+    }
+}
+
 func cameraSilhouetteCutoutRGBA(
     sourceWidth: Int,
     sourceHeight: Int,
     sourceBytesPerRow: Int,
     sourceBGRA: [UInt8],
+    alphaWidth: Int,
+    alphaHeight: Int,
+    alphaValues: [UInt8],
     outputWidth: Int,
-    outputHeight: Int,
-    alphaValues: [UInt8]
+    outputHeight: Int
 ) -> [UInt8]? {
     guard
         sourceWidth > 0,
         sourceHeight > 0,
         sourceBytesPerRow >= sourceWidth * 4,
         sourceBGRA.count == sourceHeight * sourceBytesPerRow,
+        alphaWidth > 0,
+        alphaHeight > 0,
+        alphaValues.count == alphaWidth * alphaHeight,
         outputWidth > 0,
-        outputHeight > 0,
-        alphaValues.count == outputWidth * outputHeight
+        outputHeight > 0
     else {
         return nil
     }
@@ -49,15 +61,24 @@ func cameraSilhouetteCutoutRGBA(
         )
         let sourceRow = sourceY * sourceBytesPerRow
         let destinationRow = y * outputWidth * 4
+        let alphaY = min(
+            alphaHeight - 1,
+            Int((Double(y) + 0.5) * Double(alphaHeight) / Double(outputHeight))
+        )
+        let alphaRow = alphaY * alphaWidth
 
         for x in 0..<outputWidth {
             let sourceX = min(
                 sourceWidth - 1,
                 Int((Double(x) + 0.5) * Double(sourceWidth) / Double(outputWidth))
             )
+            let alphaX = min(
+                alphaWidth - 1,
+                Int((Double(x) + 0.5) * Double(alphaWidth) / Double(outputWidth))
+            )
             let sourceOffset = sourceRow + sourceX * 4
             let destinationOffset = destinationRow + x * 4
-            let alpha = Int(alphaValues[y * outputWidth + x])
+            let alpha = Int(alphaValues[alphaRow + alphaX])
             rgba[destinationOffset] = UInt8((Int(sourceBGRA[sourceOffset + 2]) * alpha + 127) / 255)
             rgba[destinationOffset + 1] = UInt8((Int(sourceBGRA[sourceOffset + 1]) * alpha + 127) / 255)
             rgba[destinationOffset + 2] = UInt8((Int(sourceBGRA[sourceOffset]) * alpha + 127) / 255)
@@ -226,11 +247,15 @@ private func cameraSilhouetteMaskImage(
 
 private func cameraSilhouetteCutoutImage(
     sourcePixelBuffer: CVPixelBuffer,
-    width: Int,
-    height: Int,
+    alphaWidth: Int,
+    alphaHeight: Int,
     alphaValues: [UInt8]
 ) -> CGImage? {
-    guard width > 0, height > 0, alphaValues.count == width * height else {
+    guard
+        alphaWidth > 0,
+        alphaHeight > 0,
+        alphaValues.count == alphaWidth * alphaHeight
+    else {
         return nil
     }
 
@@ -253,9 +278,11 @@ private func cameraSilhouetteCutoutImage(
         sourceHeight: sourceHeight,
         sourceBytesPerRow: sourceBytesPerRow,
         sourceBGRA: sourceBGRA,
-        outputWidth: width,
-        outputHeight: height,
-        alphaValues: alphaValues
+        alphaWidth: alphaWidth,
+        alphaHeight: alphaHeight,
+        alphaValues: alphaValues,
+        outputWidth: sourceWidth,
+        outputHeight: sourceHeight
     ) else {
         return nil
     }
@@ -264,11 +291,11 @@ private func cameraSilhouetteCutoutImage(
     let colorSpace = CGColorSpaceCreateDeviceRGB()
     return provider.flatMap {
         CGImage(
-            width: width,
-            height: height,
+            width: sourceWidth,
+            height: sourceHeight,
             bitsPerComponent: 8,
             bitsPerPixel: 32,
-            bytesPerRow: width * 4,
+            bytesPerRow: sourceWidth * 4,
             space: colorSpace,
             bitmapInfo: [
                 CGBitmapInfo.byteOrder32Big,
@@ -414,7 +441,7 @@ private func cameraSilhouetteFillInteriorMaskGaps(
     return result
 }
 
-#if os(iOS)
+#if canImport(Vision)
 import Vision
 
 struct CameraSilhouetteSegmentationResult {
@@ -423,8 +450,8 @@ struct CameraSilhouetteSegmentationResult {
     var cutoutImage: CGImage?
 }
 
-final class CameraSilhouetteSegmentation {
-    var onResult: ((CameraSilhouetteSegmentationResult?) -> Void)?
+final class CameraSilhouetteSegmentation: @unchecked Sendable {
+    var onResult: (@MainActor @Sendable (CameraSilhouetteSegmentationResult?) -> Void)?
 
     private let queue = DispatchQueue(label: "camera.silhouette.segmentation", qos: .userInitiated)
     private let request: VNGeneratePersonSegmentationRequest = {
@@ -438,8 +465,9 @@ final class CameraSilhouetteSegmentation {
     private var isProcessing = false
 
     func process(pixelBuffer: CVPixelBuffer) {
+        let pixelBufferBox = CameraSilhouettePixelBufferBox(pixelBuffer)
         queue.async {
-            self.pendingPixelBuffer = pixelBuffer
+            self.pendingPixelBuffer = pixelBufferBox.pixelBuffer
             guard !self.isProcessing else {
                 return
             }
@@ -450,8 +478,9 @@ final class CameraSilhouetteSegmentation {
             while let nextPixelBuffer = self.pendingPixelBuffer {
                 self.pendingPixelBuffer = nil
                 let result = self.segment(pixelBuffer: nextPixelBuffer)
-                DispatchQueue.main.async {
-                    self.onResult?(result)
+                let onResult = self.onResult
+                Task { @MainActor in
+                    onResult?(result)
                 }
             }
         }
@@ -486,8 +515,8 @@ final class CameraSilhouetteSegmentation {
         guard let refinedMask = cameraSilhouetteRefinedMask(from: observation.pixelBuffer) else {
             return CameraSilhouetteSegmentationResult(
                 imageSize: CGSize(
-                    width: CVPixelBufferGetWidth(observation.pixelBuffer),
-                    height: CVPixelBufferGetHeight(observation.pixelBuffer)
+                    width: CVPixelBufferGetWidth(pixelBuffer),
+                    height: CVPixelBufferGetHeight(pixelBuffer)
                 ),
                 rows: [],
                 cutoutImage: nil
@@ -496,8 +525,8 @@ final class CameraSilhouetteSegmentation {
 
         return CameraSilhouetteSegmentationResult(
             imageSize: CGSize(
-                width: CVPixelBufferGetWidth(observation.pixelBuffer),
-                height: CVPixelBufferGetHeight(observation.pixelBuffer)
+                width: CVPixelBufferGetWidth(pixelBuffer),
+                height: CVPixelBufferGetHeight(pixelBuffer)
             ),
             rows: cameraSilhouetteMaskRows(
                 width: refinedMask.width,
@@ -506,8 +535,8 @@ final class CameraSilhouetteSegmentation {
             ),
             cutoutImage: cameraSilhouetteCutoutImage(
                 sourcePixelBuffer: pixelBuffer,
-                width: refinedMask.width,
-                height: refinedMask.height,
+                alphaWidth: refinedMask.width,
+                alphaHeight: refinedMask.height,
                 alphaValues: refinedMask.alpha
             )
         )

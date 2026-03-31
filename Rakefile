@@ -1,5 +1,9 @@
 require "json"
 
+def latest_path(glob)
+  Dir[File.expand_path(glob)].max_by { |path| File.mtime(path) }
+end
+
 def ios_simulator_destination(name_prefix)
   devices = JSON.parse(`xcrun simctl list devices available --json`).fetch("devices").values.flatten
   device = devices.find { |entry| entry["isAvailable"] && entry["name"].start_with?(name_prefix) }
@@ -27,6 +31,12 @@ desc "Build the Demo app for iPhone and iPad simulators"
 task :build_ios_demo do
   sh "xcodebuild build -scheme Demo -destination '#{ios_simulator_destination("iPhone")}' CODE_SIGNING_ALLOWED=NO"
   sh "xcodebuild build -scheme Demo -destination '#{ios_simulator_destination("iPad")}' CODE_SIGNING_ALLOWED=NO"
+end
+
+desc "Build the Demo macOS app bundle"
+task :build_macos_demo do
+  sh "xcodegen generate --spec Xcode/DemoMacRunner/project.yml"
+  sh "xcodebuild -project Xcode/DemoMacRunner/DemoMacRunner.xcodeproj -scheme DemoMacRunner -configuration Release build"
 end
 
 desc "Run PretextTests on an iOS Simulator"
@@ -59,9 +69,18 @@ task :test_demo do
   sh "swift test --filter DemoTests"
 end
 
-desc "Launch the demo app (release mode)"
-task :demo => :release do
-  sh ".build/release/Demo"
+desc "Launch the demo app"
+task :demo do
+  if RUBY_PLATFORM.include?("darwin")
+    Rake::Task[:build_macos_demo].invoke
+    app_path = latest_path("~/Library/Developer/Xcode/DerivedData/DemoMacRunner-*/Build/Products/Release/Demo.app")
+    raise "Built Demo.app not found in DerivedData." unless app_path
+
+    sh "open '#{app_path}'"
+  else
+    Rake::Task[:release].invoke
+    sh ".build/release/Demo"
+  end
 end
 
 desc "Launch the benchmark GUI (release mode)"

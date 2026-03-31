@@ -13,15 +13,47 @@ final class CameraSilhouetteSegmentationTests: XCTestCase {
                 10, 20, 30, 255, 40, 50, 60, 255,
                 70, 80, 90, 255, 100, 110, 120, 255,
             ],
+            alphaWidth: 2,
+            alphaHeight: 2,
+            alphaValues: [0, 64, 128, 255],
             outputWidth: 2,
-            outputHeight: 2,
-            alphaValues: [0, 64, 128, 255]
+            outputHeight: 2
         ))
 
         XCTAssertEqual(Array(rgba[0..<4]), [0, 0, 0, 0])
         XCTAssertEqual(Array(rgba[4..<8]), [15, 13, 10, 64])
         XCTAssertEqual(Array(rgba[8..<12]), [45, 40, 35, 128])
         XCTAssertEqual(Array(rgba[12..<16]), [120, 110, 100, 255])
+    }
+
+    func testCutoutRGBAResamplesMaskIntoSourceAspectRatio() throws {
+        let rgba = try XCTUnwrap(cameraSilhouetteCutoutRGBA(
+            sourceWidth: 4,
+            sourceHeight: 2,
+            sourceBytesPerRow: 16,
+            sourceBGRA: [
+                10, 20, 30, 255, 40, 50, 60, 255, 70, 80, 90, 255, 100, 110, 120, 255,
+                130, 140, 150, 255, 160, 170, 180, 255, 190, 200, 210, 255, 220, 230, 240, 255,
+            ],
+            alphaWidth: 2,
+            alphaHeight: 2,
+            alphaValues: [
+                255, 0,
+                0, 255,
+            ],
+            outputWidth: 4,
+            outputHeight: 2
+        ))
+
+        XCTAssertEqual(Array(rgba[0..<4]), [30, 20, 10, 255])
+        XCTAssertEqual(Array(rgba[4..<8]), [60, 50, 40, 255])
+        XCTAssertEqual(Array(rgba[8..<12]), [0, 0, 0, 0])
+        XCTAssertEqual(Array(rgba[12..<16]), [0, 0, 0, 0])
+
+        XCTAssertEqual(Array(rgba[16..<20]), [0, 0, 0, 0])
+        XCTAssertEqual(Array(rgba[20..<24]), [0, 0, 0, 0])
+        XCTAssertEqual(Array(rgba[24..<28]), [210, 200, 190, 255])
+        XCTAssertEqual(Array(rgba[28..<32]), [240, 230, 220, 255])
     }
 
     func testMaskImagePreservesSoftEdgeAlpha() throws {

@@ -1,3 +1,4 @@
+import AVFoundation
 import XCTest
 @testable import Demo
 
@@ -26,5 +27,23 @@ final class CameraSilhouetteCaptureTests: XCTestCase {
                 minimumInterval: minimumInterval
             )
         )
+    }
+
+    func testIOSCapturePolicyPrefersMirroredFrontPortraitFeed() {
+        let policy = cameraSilhouetteCapturePolicy(for: .ios)
+
+        XCTAssertTrue(policy.prefersFrontCamera)
+        XCTAssertTrue(policy.usesPortraitOrientation)
+        XCTAssertTrue(cameraSilhouetteShouldMirrorCapture(devicePosition: .front, platform: .ios))
+        XCTAssertTrue(cameraSilhouetteShouldMirrorCapture(devicePosition: .unspecified, platform: .ios))
+    }
+
+    func testMacOSCapturePolicyUsesDefaultCameraAndNativeOrientation() {
+        let policy = cameraSilhouetteCapturePolicy(for: .macOS)
+
+        XCTAssertFalse(policy.prefersFrontCamera)
+        XCTAssertFalse(policy.usesPortraitOrientation)
+        XCTAssertTrue(cameraSilhouetteShouldMirrorCapture(devicePosition: .front, platform: .macOS))
+        XCTAssertFalse(cameraSilhouetteShouldMirrorCapture(devicePosition: .unspecified, platform: .macOS))
     }
 }

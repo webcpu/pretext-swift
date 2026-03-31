@@ -1,5 +1,10 @@
 import Foundation
 
+#if canImport(AVFoundation)
+import AVFoundation
+import CoreVideo
+#endif
+
 func cameraSilhouetteShouldProcessFrame(
     currentTimestamp: Double,
     lastProcessedTimestamp: Double?,
@@ -14,9 +19,40 @@ func cameraSilhouetteShouldProcessFrame(
     return currentTimestamp - lastProcessedTimestamp >= minimumInterval
 }
 
-#if os(iOS)
-import AVFoundation
-import CoreVideo
+struct CameraSilhouetteCapturePolicy: Equatable {
+    var prefersFrontCamera: Bool
+    var usesPortraitOrientation: Bool
+}
+
+func cameraSilhouetteCapturePolicy(
+    for platform: DemoNavigationPlatform = .current
+) -> CameraSilhouetteCapturePolicy {
+    switch platform {
+    case .ios:
+        CameraSilhouetteCapturePolicy(
+            prefersFrontCamera: true,
+            usesPortraitOrientation: true
+        )
+    case .macOS:
+        CameraSilhouetteCapturePolicy(
+            prefersFrontCamera: false,
+            usesPortraitOrientation: false
+        )
+    }
+}
+
+#if canImport(AVFoundation)
+func cameraSilhouetteShouldMirrorCapture(
+    devicePosition: AVCaptureDevice.Position,
+    platform: DemoNavigationPlatform = .current
+) -> Bool {
+    switch platform {
+    case .ios:
+        true
+    case .macOS:
+        devicePosition == .front
+    }
+}
 
 enum CameraSilhouetteCaptureState: Equatable {
     case requestingPermission
@@ -26,11 +62,11 @@ enum CameraSilhouetteCaptureState: Equatable {
     case running
 }
 
-final class CameraSilhouetteCapture: NSObject {
+final class CameraSilhouetteCapture: NSObject, @unchecked Sendable {
     let session = AVCaptureSession()
 
-    var onStateChange: ((CameraSilhouetteCaptureState) -> Void)?
-    var onPixelBuffer: ((CVPixelBuffer) -> Void)?
+    var onStateChange: (@MainActor @Sendable (CameraSilhouetteCaptureState) -> Void)?
+    var onPixelBuffer: (@Sendable (CVPixelBuffer) -> Void)?
 
     private let sessionQueue = DispatchQueue(label: "camera.silhouette.capture.session")
     private let videoOutputQueue = DispatchQueue(label: "camera.silhouette.capture.frames", qos: .userInitiated)
@@ -38,31 +74,30 @@ final class CameraSilhouetteCapture: NSObject {
     private let minimumSegmentationFrameInterval = 1.0 / 30.0
     private var isConfigured = false
     private var lastProcessedTimestamp: Double?
+    private let policy = cameraSilhouetteCapturePolicy()
 
     func start() {
         switch AVCaptureDevice.authorizationStatus(for: .video) {
         case .authorized:
             configureAndRun()
         case .notDetermined:
-            onStateChange?(.requestingPermission)
+            notifyStateChange(.requestingPermission)
             AVCaptureDevice.requestAccess(for: .video) { [weak self] granted in
-                DispatchQueue.main.async {
-                    guard let self else {
-                        return
-                    }
-                    if granted {
-                        self.configureAndRun()
-                    } else {
-                        self.onStateChange?(.permissionDenied)
-                    }
+                guard let self else {
+                    return
+                }
+                if granted {
+                    self.configureAndRun()
+                } else {
+                    self.notifyStateChange(.permissionDenied)
                 }
             }
         case .denied:
-            onStateChange?(.permissionDenied)
+            notifyStateChange(.permissionDenied)
         case .restricted:
-            onStateChange?(.restricted)
+            notifyStateChange(.restricted)
         @unknown default:
-            onStateChange?(.sessionUnavailable("Unknown camera permission state."))
+            notifyStateChange(.sessionUnavailable("Unknown camera permission state."))
         }
     }
 
@@ -87,25 +122,24 @@ final class CameraSilhouetteCapture: NSObject {
                 }
 
                 guard !self.session.isRunning else {
-                    DispatchQueue.main.async {
-                        self.onStateChange?(.running)
-                    }
+                    self.notifyStateChange(.running)
                     return
                 }
 
                 self.session.startRunning()
-                DispatchQueue.main.async {
-                    self.onStateChange?(.running)
-                }
+                self.notifyStateChange(.running)
             } catch let error as CameraSilhouetteCaptureConfigurationError {
-                DispatchQueue.main.async {
-                    self.onStateChange?(.sessionUnavailable(error.message))
-                }
+                self.notifyStateChange(.sessionUnavailable(error.message))
             } catch {
-                DispatchQueue.main.async {
-                    self.onStateChange?(.sessionUnavailable(error.localizedDescription))
-                }
+                self.notifyStateChange(.sessionUnavailable(error.localizedDescription))
             }
+        }
+    }
+
+    private func notifyStateChange(_ state: CameraSilhouetteCaptureState) {
+        let onStateChange = self.onStateChange
+        Task { @MainActor in
+            onStateChange?(state)
         }
     }
 
@@ -115,8 +149,8 @@ final class CameraSilhouetteCapture: NSObject {
 
         session.sessionPreset = .high
 
-        guard let camera = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .front) else {
-            throw CameraSilhouetteCaptureConfigurationError(message: "Front camera unavailable.")
+        guard let camera = cameraSilhouettePreferredCamera(policy: policy) else {
+            throw CameraSilhouetteCaptureConfigurationError(message: "No compatible camera is available.")
         }
 
         let input = try AVCaptureDeviceInput(device: camera)
@@ -137,12 +171,17 @@ final class CameraSilhouetteCapture: NSObject {
         session.addOutput(videoOutput)
 
         if let connection = videoOutput.connection(with: .video) {
-            if connection.isVideoOrientationSupported {
+            #if os(iOS)
+            if policy.usesPortraitOrientation, connection.isVideoOrientationSupported {
                 connection.videoOrientation = .portrait
             }
+            #endif
             if connection.isVideoMirroringSupported {
                 connection.automaticallyAdjustsVideoMirroring = false
-                connection.isVideoMirrored = true
+                connection.isVideoMirrored = cameraSilhouetteShouldMirrorCapture(
+                    devicePosition: camera.position,
+                    platform: .current
+                )
             }
         }
     }
@@ -172,5 +211,17 @@ extension CameraSilhouetteCapture: AVCaptureVideoDataOutputSampleBufferDelegate 
 
 private struct CameraSilhouetteCaptureConfigurationError: Error {
     var message: String
+}
+
+private func cameraSilhouettePreferredCamera(
+    policy: CameraSilhouetteCapturePolicy
+) -> AVCaptureDevice? {
+    if policy.prefersFrontCamera {
+        return AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .front)
+            ?? AVCaptureDevice.default(for: .video)
+    }
+
+    return AVCaptureDevice.default(for: .video)
+        ?? AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .front)
 }
 #endif

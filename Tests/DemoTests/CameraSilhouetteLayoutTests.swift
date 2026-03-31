@@ -213,6 +213,62 @@ final class CameraSilhouetteLayoutTests: XCTestCase {
         XCTAssertEqual(metrics.lineHeight, 30, accuracy: 0.001)
     }
 
+    func testPageMetricsUseSinglePageInPortrait() {
+        let metrics = cameraSilhouettePageMetrics(
+            viewportWidth: 390,
+            viewportHeight: 844
+        )
+
+        XCTAssertEqual(metrics.pageRects.count, 1)
+        XCTAssertEqual(metrics.contentRects.count, 1)
+        XCTAssertEqual(metrics.pageRects[0], metrics.pageRect)
+        XCTAssertEqual(metrics.contentRects[0], metrics.contentRect)
+    }
+
+    func testPageMetricsSplitLandscapeIntoTwoSideBySidePages() {
+        let metrics = cameraSilhouettePageMetrics(
+            viewportWidth: 1180,
+            viewportHeight: 820
+        )
+
+        XCTAssertEqual(metrics.pageRects.count, 2)
+        XCTAssertEqual(metrics.contentRects.count, 2)
+        XCTAssertEqual(metrics.pageRects[0].width, metrics.pageRects[1].width, accuracy: 0.001)
+        XCTAssertEqual(metrics.pageRects[0].minY, metrics.pageRects[1].minY, accuracy: 0.001)
+        XCTAssertEqual(metrics.pageRects[0].height, metrics.pageRects[1].height, accuracy: 0.001)
+        XCTAssertLessThan(metrics.pageRects[0].maxX, metrics.pageRects[1].minX)
+        XCTAssertEqual(metrics.contentRect.minX, metrics.contentRects[0].minX, accuracy: 0.001)
+        XCTAssertEqual(metrics.contentRect.maxX, metrics.contentRects[1].maxX, accuracy: 0.001)
+    }
+
+    func testLandscapeSnapshotContinuesArticleOntoSecondPage() {
+        let snapshot = evaluateCameraSilhouetteSnapshot(
+            article: landscapeArticle,
+            viewportWidth: 1180,
+            viewportHeight: 820,
+            silhouetteRows: []
+        )
+
+        let leftRect = snapshot.pageMetrics.contentRects[0]
+        let rightRect = snapshot.pageMetrics.contentRects[1]
+        let leftPageLines = snapshot.lines.filter { line in
+            line.x >= leftRect.minX && line.x <= leftRect.maxX &&
+                line.y >= leftRect.minY && line.y <= leftRect.maxY
+        }
+        let rightPageLines = snapshot.lines.filter { line in
+            line.x >= rightRect.minX && line.x <= rightRect.maxX &&
+                line.y >= rightRect.minY && line.y <= rightRect.maxY
+        }
+
+        XCTAssertFalse(leftPageLines.isEmpty)
+        XCTAssertFalse(rightPageLines.isEmpty)
+        guard let firstRightPageLine = rightPageLines.first else {
+            XCTFail("Expected article to continue onto the second page")
+            return
+        }
+        XCTAssertEqual(firstRightPageLine.y, rightRect.minY, accuracy: 0.5)
+    }
+
     func testPageMetricsUseFullSafeAreaWidth() {
         let metrics = cameraSilhouettePageMetrics(
             viewportWidth: 390,
@@ -279,6 +335,10 @@ final class CameraSilhouetteLayoutTests: XCTestCase {
 private let sampleArticle = Array(repeating: """
 The city keeps a second draft of every life in reflected glass, elevator mirrors, and late windows.
 """, count: 24).joined(separator: " ")
+
+private let landscapeArticle = Array(repeating: """
+The city keeps a second draft of every life in reflected glass, elevator mirrors, and late windows.
+""", count: 120).joined(separator: " ")
 
 private let centeredRows = stride(from: 0.14, through: 0.58, by: 0.03).map {
     CameraSilhouetteMaskRow(

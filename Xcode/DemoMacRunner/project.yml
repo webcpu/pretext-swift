@@ -1,0 +1,49 @@
+name: DemoMacRunner
+options:
+  deploymentTarget:
+    macOS: "15.0"
+targets:
+  BenchmarkSupport:
+    type: framework
+    platform: macOS
+    deploymentTarget: "15.0"
+    sources:
+      - path: ../../Sources/Benchmark
+    dependencies:
+      - package: PretextSwift
+        product: Pretext
+      - package: PretextSwift
+        product: PretextUI
+    settings:
+      base:
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: NA5BE2D52P
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.liang.pretextswift.benchmarksupport.macos
+        SKIP_INSTALL: YES
+  DemoMacRunner:
+    type: application
+    platform: macOS
+    deploymentTarget: "15.0"
+    sources:
+      - path: ../../Sources/Demo
+      - path: ../DemoDeviceRunner/DemoBundleModuleShim.swift
+    dependencies:
+      - target: BenchmarkSupport
+      - package: PretextSwift
+        product: Pretext
+      - package: PretextSwift
+        product: PretextUI
+    settings:
+      base:
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: NA5BE2D52P
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.liang.pretextswift.demomacrunner
+        PRODUCT_NAME: Demo
+        INFOPLIST_KEY_CFBundleDisplayName: Demo
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.developer-tools
+        INFOPLIST_KEY_NSCameraUsageDescription: Read your silhouette live so article text can wrap around you.
+packages:
+  PretextSwift:
+    path: ../..

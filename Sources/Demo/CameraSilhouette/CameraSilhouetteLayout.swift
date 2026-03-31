@@ -16,17 +16,38 @@ struct CameraSilhouetteMaskRow: Equatable, Sendable {
 
 struct CameraSilhouettePageMetrics: Equatable {
     var pageRect: WrapRect
+    var pageRects: [WrapRect]
     var margin: Double
     var fontSize: Double
     var lineHeight: Double
     var minimumSlotWidth: Double
 
+    var contentRects: [WrapRect] {
+        pageRects.map { pageRect in
+            WrapRect(
+                x: pageRect.x + margin,
+                y: pageRect.y + margin,
+                width: max(0, pageRect.width - margin * 2),
+                height: max(0, pageRect.height - margin * 2)
+            )
+        }
+    }
+
     var contentRect: WrapRect {
-        WrapRect(
-            x: pageRect.x + margin,
-            y: pageRect.y + margin,
-            width: max(0, pageRect.width - margin * 2),
-            height: max(0, pageRect.height - margin * 2)
+        guard let firstRect = contentRects.first else {
+            return WrapRect(x: pageRect.x, y: pageRect.y, width: 0, height: 0)
+        }
+
+        let minX = contentRects.map(\.minX).min() ?? firstRect.minX
+        let maxX = contentRects.map(\.maxX).max() ?? firstRect.maxX
+        let minY = contentRects.map(\.minY).min() ?? firstRect.minY
+        let maxY = contentRects.map(\.maxY).max() ?? firstRect.maxY
+
+        return WrapRect(
+            x: minX,
+            y: minY,
+            width: max(0, maxX - minX),
+            height: max(0, maxY - minY)
         )
     }
 }
@@ -46,6 +67,11 @@ struct CameraSilhouetteSnapshot: Equatable {
 }
 
 private enum CameraSilhouetteLayoutDefaults {
+    static let landscapeSpreadBreakpoint = 760.0
+    static let landscapeOuterGutter = 52.0
+    static let landscapeOuterGutterFraction = 0.048
+    static let landscapeCenterGap = 28.0
+    static let landscapeCenterGapFraction = 0.025
     static let minMargin = 20.0
     static let maxMargin = 28.0
     static let minFontSize = 14.0
@@ -114,7 +140,41 @@ func cameraSilhouettePageMetrics(
 ) -> CameraSilhouettePageMetrics {
     let pageWidth = max(0, viewportWidth)
     let pageHeight = max(0, viewportHeight - topInset - bottomInset)
-    let scale = min(1, max(0.55, pageWidth / 390))
+    let pageY = round(topInset)
+    let usesLandscapeSpread = pageWidth >= CameraSilhouetteLayoutDefaults.landscapeSpreadBreakpoint && pageWidth > pageHeight
+    let pageRects: [WrapRect]
+    let layoutWidth: Double
+
+    if usesLandscapeSpread {
+        let outerGutter = round(
+            max(
+                CameraSilhouetteLayoutDefaults.landscapeOuterGutter,
+                pageWidth * CameraSilhouetteLayoutDefaults.landscapeOuterGutterFraction
+            )
+        )
+        let centerGap = round(
+            max(
+                CameraSilhouetteLayoutDefaults.landscapeCenterGap,
+                pageWidth * CameraSilhouetteLayoutDefaults.landscapeCenterGapFraction
+            )
+        )
+        let singlePageWidth = max(0, round((pageWidth - outerGutter * 2 - centerGap) / 2))
+        let leftPageX = outerGutter
+        let rightPageX = pageWidth - outerGutter - singlePageWidth
+
+        pageRects = [
+            WrapRect(x: leftPageX, y: pageY, width: singlePageWidth, height: pageHeight),
+            WrapRect(x: rightPageX, y: pageY, width: singlePageWidth, height: pageHeight),
+        ]
+        layoutWidth = singlePageWidth
+    } else {
+        pageRects = [
+            WrapRect(x: 0, y: pageY, width: pageWidth, height: pageHeight)
+        ]
+        layoutWidth = pageWidth
+    }
+
+    let scale = min(1, max(0.55, layoutWidth / 390))
     let margin = round(
         min(
             CameraSilhouetteLayoutDefaults.maxMargin,
@@ -139,10 +199,11 @@ func cameraSilhouettePageMetrics(
     return CameraSilhouettePageMetrics(
         pageRect: WrapRect(
             x: 0,
-            y: round(topInset),
+            y: pageY,
             width: pageWidth,
             height: pageHeight
         ),
+        pageRects: pageRects,
         margin: margin,
         fontSize: fontSize,
         lineHeight: lineHeight,
@@ -338,8 +399,7 @@ func evaluateCameraSilhouetteSnapshot(
         topInset: topInset,
         bottomInset: bottomInset
     )
-    let contentRect = metrics.contentRect
-    let baseSlot = WrapInterval(left: contentRect.minX, right: contentRect.maxX)
+    let spreadContentRect = metrics.contentRect
     let effectiveRows = silhouetteRows.filter { !$0.occupied.isEmpty }
 
     var preparedArticle = CameraSilhouetteLayoutAssets.preparedArticle(
@@ -349,69 +409,77 @@ func evaluateCameraSilhouetteSnapshot(
     var cursor = LayoutCursor.start
     var lines: [PositionedLine] = []
     var bands: [CameraSilhouetteBandSnapshot] = []
-    var lineTop = contentRect.minY
     var encounteredBlockedBand = false
 
 layoutLoop:
-    while lineTop + metrics.lineHeight <= contentRect.maxY {
-        let bandBottom = lineTop + metrics.lineHeight
-        let blocked = cameraSilhouetteBlockedIntervals(
-            rows: effectiveRows,
-            bandTop: lineTop,
-            bandBottom: bandBottom,
-            contentRect: contentRect
-        )
-        let selectedSlots: [WrapInterval]
+    for contentRect in metrics.contentRects {
+        let baseSlot = WrapInterval(left: contentRect.minX, right: contentRect.maxX)
+        var lineTop = contentRect.minY
 
-        if blocked.isEmpty {
-            selectedSlots = [baseSlot]
-        } else {
-            encounteredBlockedBand = true
-            selectedSlots = cameraSilhouetteOpenSlots(
-                base: baseSlot,
-                blocked: blocked,
-                minimumWidth: metrics.minimumSlotWidth
+        while lineTop + metrics.lineHeight <= contentRect.maxY {
+            let bandBottom = lineTop + metrics.lineHeight
+            let blocked = clipCameraSilhouetteIntervals(
+                cameraSilhouetteBlockedIntervals(
+                    rows: effectiveRows,
+                    bandTop: lineTop,
+                    bandBottom: bandBottom,
+                    contentRect: spreadContentRect
+                ),
+                to: baseSlot
             )
-        }
+            let selectedSlots: [WrapInterval]
 
-        let roundedTop = round(lineTop)
-        bands.append(
-            CameraSilhouetteBandSnapshot(
-                top: roundedTop,
-                bottom: round(bandBottom),
-                blocked: blocked,
-                selectedSlots: selectedSlots
-            )
-        )
-
-        guard !selectedSlots.isEmpty else {
-            lineTop += metrics.lineHeight
-            continue
-        }
-
-        for selectedSlot in selectedSlots {
-            guard let line = layoutNextLine(
-                &preparedArticle,
-                start: cursor,
-                maxWidth: selectedSlot.right - selectedSlot.left
-            ) else {
-                break layoutLoop
-            }
-            if line.end == cursor {
-                break layoutLoop
+            if blocked.isEmpty {
+                selectedSlots = [baseSlot]
+            } else {
+                encounteredBlockedBand = true
+                selectedSlots = cameraSilhouetteOpenSlots(
+                    base: baseSlot,
+                    blocked: blocked,
+                    minimumWidth: metrics.minimumSlotWidth
+                )
             }
 
-            lines.append(
-                PositionedLine(
-                    x: round(selectedSlot.left),
-                    y: roundedTop,
-                    width: line.width,
-                    text: line.text
+            let roundedTop = round(lineTop)
+            bands.append(
+                CameraSilhouetteBandSnapshot(
+                    top: roundedTop,
+                    bottom: round(bandBottom),
+                    blocked: blocked,
+                    selectedSlots: selectedSlots
                 )
             )
-            cursor = line.end
+
+            guard !selectedSlots.isEmpty else {
+                lineTop += metrics.lineHeight
+                continue
+            }
+
+            for selectedSlot in selectedSlots {
+                guard let line = layoutNextLine(
+                    &preparedArticle,
+                    start: cursor,
+                    maxWidth: selectedSlot.right - selectedSlot.left
+                ) else {
+                    break layoutLoop
+                }
+                if line.end == cursor {
+                    break layoutLoop
+                }
+
+                lines.append(
+                    PositionedLine(
+                        x: round(selectedSlot.left),
+                        y: roundedTop,
+                        width: line.width,
+                        text: line.text
+                    )
+                )
+                cursor = line.end
+            }
+
+            lineTop += metrics.lineHeight
         }
-        lineTop += metrics.lineHeight
     }
 
     return CameraSilhouetteSnapshot(
@@ -441,6 +509,20 @@ private func cameraSilhouetteBlockedIntervals(
     }
 
     return mergeCameraSilhouetteIntervals(intervals)
+}
+
+private func clipCameraSilhouetteIntervals(
+    _ intervals: [WrapInterval],
+    to base: WrapInterval
+) -> [WrapInterval] {
+    intervals.compactMap { interval in
+        let left = max(base.left, interval.left)
+        let right = min(base.right, interval.right)
+        guard right > left else {
+            return nil
+        }
+        return WrapInterval(left: left, right: right)
+    }
 }
 
 private func mergeCameraSilhouetteIntervals(_ intervals: [WrapInterval]) -> [WrapInterval] {

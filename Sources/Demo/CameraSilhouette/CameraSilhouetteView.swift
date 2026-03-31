@@ -1,26 +1,10 @@
 import SwiftUI
+import Pretext
+import PretextUI
 
 struct CameraSilhouetteView: View {
     var body: some View {
-        #if os(iOS)
-        CameraSilhouetteIOSView()
-        #else
-        ZStack {
-            LinearGradient(
-                colors: [
-                    Color(red: 0.10, green: 0.09, blue: 0.11),
-                    Color(red: 0.22, green: 0.18, blue: 0.16),
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
-
-            Text("Live Camera Silhouette is available on iOS only.")
-                .font(.system(size: 16, weight: .medium))
-                .foregroundStyle(.white.opacity(0.82))
-        }
-        #endif
+        CameraSilhouetteLiveView()
     }
 }
 
@@ -82,15 +66,11 @@ func cameraSilhouetteOverlayPanel(for state: CameraSilhouetteOverlayState) -> Ca
     }
 }
 
-#if os(iOS)
-import AVFoundation
-import Pretext
-import PretextUI
-
-private enum CameraSilhouettePalette {
-    static let ink = Color(red: 33 / 255, green: 28 / 255, blue: 22 / 255)
-    static let paperTop = Color(red: 247 / 255, green: 237 / 255, blue: 223 / 255)
-    static let paperBottom = Color(red: 225 / 255, green: 208 / 255, blue: 188 / 255)
+enum CameraSilhouettePalette {
+    static let paperRGB = SituationalAwarenessPalette.paperRGB
+    static let inkRGB = SituationalAwarenessPalette.inkRGB
+    static let paper = SituationalAwarenessPalette.paper
+    static let ink = SituationalAwarenessPalette.ink
     static let label = Color.white.opacity(0.88)
     static let secondaryLabel = Color.white.opacity(0.68)
     static let chipBackground = Color.black.opacity(0.34)
@@ -148,6 +128,8 @@ private final class CameraSilhouetteSceneModel: ObservableObject {
     private var hasStarted = false
 
     init() {
+        let segmentation = self.segmentation
+
         capture.onStateChange = { [weak self] state in
             guard let self else {
                 return
@@ -161,8 +143,8 @@ private final class CameraSilhouetteSceneModel: ObservableObject {
             self.recomputeSnapshot(force: true)
         }
 
-        capture.onPixelBuffer = { [weak self] pixelBuffer in
-            self?.segmentation.process(pixelBuffer: pixelBuffer)
+        capture.onPixelBuffer = { pixelBuffer in
+            segmentation.process(pixelBuffer: pixelBuffer)
         }
 
         segmentation.onResult = { [weak self] result in
@@ -281,7 +263,7 @@ private final class CameraSilhouetteSceneModel: ObservableObject {
     }
 }
 
-private struct CameraSilhouetteIOSView: View {
+private struct CameraSilhouetteLiveView: View {
     @StateObject private var model = CameraSilhouetteSceneModel()
 
     var body: some View {
@@ -333,40 +315,14 @@ private struct CameraSilhouetteIOSView: View {
 
 private struct CameraSilhouetteBackdrop: View {
     var body: some View {
-        LinearGradient(
-            colors: [
-                Color(red: 0.12, green: 0.11, blue: 0.13),
-                Color(red: 0.23, green: 0.17, blue: 0.14),
-                Color(red: 0.48, green: 0.28, blue: 0.16),
-            ],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
+        CameraSilhouettePalette.paper
         .ignoresSafeArea()
     }
 }
 
 private struct CameraSilhouetteSurfaceWash: View {
     var body: some View {
-        LinearGradient(
-            colors: [
-                CameraSilhouettePalette.paperTop.opacity(0.90),
-                CameraSilhouettePalette.paperBottom.opacity(0.82),
-            ],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-        .overlay {
-            LinearGradient(
-                colors: [
-                    Color.white.opacity(0.12),
-                    Color.clear,
-                    Color.black.opacity(0.08),
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-        }
+        Color.clear
         .ignoresSafeArea()
     }
 }
@@ -485,4 +441,3 @@ private enum CameraSilhouetteResources {
         return text
     }
 }
-#endif
