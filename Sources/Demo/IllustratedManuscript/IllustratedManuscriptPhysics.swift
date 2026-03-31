@@ -44,14 +44,19 @@ private enum IllustratedDragonPhysics {
     static let fireWrapPadding = 6.0
 }
 
-func makeIllustratedDragonState(pageRect: WrapRect, scale: Double) -> IllustratedDragonState {
+func makeIllustratedDragonState(
+    pageRect: WrapRect,
+    scale: Double,
+    platform: DemoNavigationPlatform = .current
+) -> IllustratedDragonState {
     let margin = round(IllustratedManuscriptConstants.baseMargin * scale)
     let lineHeightScale = 0.4 + 0.6 * scale
     let lineHeight = max(22.0, round(IllustratedManuscriptConstants.baseLineHeight * lineHeightScale))
     let dropCap = IllustratedManuscriptAssets.dropCapGeometry(
         pageRect: WrapRect(x: 0, y: 0, width: pageRect.width, height: pageRect.height),
         margin: margin,
-        lineHeight: lineHeight
+        lineHeight: lineHeight,
+        scale: illustratedManuscriptDropCapScale(for: platform)
     )
     let headX = pageRect.x + margin + dropCap.obstacleRect.width * 0.8
     let headY = pageRect.y + margin - 70 * scale

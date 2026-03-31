@@ -51,7 +51,8 @@ func illustratedManuscriptPageMetrics(
 func evaluateIllustratedManuscriptSnapshot(
     viewportWidth: Double,
     viewportHeight: Double,
-    dragonState: IllustratedDragonState
+    dragonState: IllustratedDragonState,
+    platform: DemoNavigationPlatform = .current
 ) -> IllustratedManuscriptSnapshot {
     let metrics = illustratedManuscriptPageMetrics(
         viewportWidth: viewportWidth,
@@ -60,7 +61,8 @@ func evaluateIllustratedManuscriptSnapshot(
     let dropCap = IllustratedManuscriptAssets.dropCapGeometry(
         pageRect: metrics.pageRect,
         margin: metrics.margin,
-        lineHeight: metrics.lineHeight
+        lineHeight: metrics.lineHeight,
+        scale: illustratedManuscriptDropCapScale(for: platform)
     )
     let dragonHull = illustratedDragonWrapHull(for: dragonState)
     let lineTextInset = IllustratedManuscriptAssets.lineTextInset(

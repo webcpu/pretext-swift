@@ -11,16 +11,18 @@ struct IllustratedManuscriptView: View {
     var body: some View {
         GeometryReader { proxy in
             TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: false)) { timeline in
+                let platform = DemoNavigationPlatform.current
                 let now = timeline.date.timeIntervalSinceReferenceDate * 1000
                 let metrics = illustratedManuscriptPageMetrics(
                     viewportWidth: proxy.size.width,
                     viewportHeight: proxy.size.height
                 )
-                let state = resolvedDragonState(metrics: metrics)
+                let state = resolvedDragonState(metrics: metrics, platform: platform)
                 let snapshot = evaluateIllustratedManuscriptSnapshot(
                     viewportWidth: proxy.size.width,
                     viewportHeight: proxy.size.height,
-                    dragonState: state
+                    dragonState: state,
+                    platform: platform
                 )
 
                 Canvas(opaque: true) { context, size in
@@ -42,14 +44,16 @@ struct IllustratedManuscriptView: View {
                 .task(id: sizeTaskID(metrics: metrics)) {
                     dragonState = makeIllustratedDragonState(
                         pageRect: metrics.pageRect,
-                        scale: metrics.scale
+                        scale: metrics.scale,
+                        platform: platform
                     )
                 }
                 .task(id: Int(now / 80)) {
                     guard var state = dragonState else {
                         dragonState = makeIllustratedDragonState(
                             pageRect: metrics.pageRect,
-                            scale: metrics.scale
+                            scale: metrics.scale,
+                            platform: platform
                         )
                         return
                     }
@@ -57,7 +61,8 @@ struct IllustratedManuscriptView: View {
                     if state.pageRect != metrics.pageRect || abs(state.scale - metrics.scale) > 0.001 {
                         state = makeIllustratedDragonState(
                             pageRect: metrics.pageRect,
-                            scale: metrics.scale
+                            scale: metrics.scale,
+                            platform: platform
                         )
                     }
 
@@ -86,12 +91,19 @@ struct IllustratedManuscriptView: View {
             }
     }
 
-    private func resolvedDragonState(metrics: IllustratedManuscriptPageMetrics) -> IllustratedDragonState {
+    private func resolvedDragonState(
+        metrics: IllustratedManuscriptPageMetrics,
+        platform: DemoNavigationPlatform
+    ) -> IllustratedDragonState {
         if let dragonState {
             return dragonState
         }
 
-        return makeIllustratedDragonState(pageRect: metrics.pageRect, scale: metrics.scale)
+        return makeIllustratedDragonState(
+            pageRect: metrics.pageRect,
+            scale: metrics.scale,
+            platform: platform
+        )
     }
 
     private func sizeTaskID(metrics: IllustratedManuscriptPageMetrics) -> String {

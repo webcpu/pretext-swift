@@ -10,6 +10,8 @@ enum IllustratedManuscriptConstants {
     static let baseFontSize = 21.0
     static let baseLineHeight = 34.0
     static let maxPageHeight = 960.0
+    static let dropCapLineHeightMultiplier = 7.0
+    static let watchDropCapScale = 0.25
     static let dragonSpriteScale = 0.24
     static let dragonWidths = [
         221.0, 130.0, 203.0, 223.0, 285.0,
@@ -91,8 +93,13 @@ enum IllustratedManuscriptAssets {
         return ((lineHeight - capHeightApproximation) / 2).rounded()
     }
 
-    static func dropCapGeometry(pageRect: WrapRect, margin: Double, lineHeight: Double) -> IllustratedDropCapGeometry {
-        let drawHeight = lineHeight * 7
+    static func dropCapGeometry(
+        pageRect: WrapRect,
+        margin: Double,
+        lineHeight: Double,
+        scale: Double = 1
+    ) -> IllustratedDropCapGeometry {
+        let drawHeight = lineHeight * IllustratedManuscriptConstants.dropCapLineHeightMultiplier * scale
         let drawWidth = Double(dropCapImage.width) * (drawHeight / Double(dropCapImage.height))
         let drawRect = WrapRect(
             x: pageRect.x + margin,
@@ -148,5 +155,14 @@ enum IllustratedManuscriptAssets {
                 loadImage(named: "body-\($0)", extension: "png")
             }
         )
+    }
+}
+
+func illustratedManuscriptDropCapScale(for platform: DemoNavigationPlatform) -> Double {
+    switch platform {
+    case .watchOS:
+        IllustratedManuscriptConstants.watchDropCapScale
+    case .ios, .macOS:
+        1
     }
 }

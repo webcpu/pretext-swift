@@ -2,6 +2,48 @@ import XCTest
 @testable import Demo
 
 final class IllustratedManuscriptLayoutTests: XCTestCase {
+    func testWatchSizedSnapshotShrinksDropCapToQuarterScale() {
+        let metrics = illustratedManuscriptPageMetrics(
+            viewportWidth: 198,
+            viewportHeight: 242
+        )
+        let dragonState = makeIllustratedDragonState(
+            pageRect: metrics.pageRect,
+            scale: metrics.scale,
+            platform: .watchOS
+        )
+
+        let snapshot = evaluateIllustratedManuscriptSnapshot(
+            viewportWidth: 198,
+            viewportHeight: 242,
+            dragonState: dragonState,
+            platform: .watchOS
+        )
+
+        XCTAssertEqual(snapshot.dropCapDrawRect.height, 38.5, accuracy: 0.001)
+    }
+
+    func testPhoneSizedSnapshotKeepsFullDropCapScale() {
+        let metrics = illustratedManuscriptPageMetrics(
+            viewportWidth: 390,
+            viewportHeight: 844
+        )
+        let dragonState = makeIllustratedDragonState(
+            pageRect: metrics.pageRect,
+            scale: metrics.scale,
+            platform: .ios
+        )
+
+        let snapshot = evaluateIllustratedManuscriptSnapshot(
+            viewportWidth: 390,
+            viewportHeight: 844,
+            dragonState: dragonState,
+            platform: .ios
+        )
+
+        XCTAssertEqual(snapshot.dropCapDrawRect.height, 168, accuracy: 0.001)
+    }
+
     func testDesktopPageMetricsMatchSourceComposition() {
         let metrics = illustratedManuscriptPageMetrics(
             viewportWidth: 1440,
