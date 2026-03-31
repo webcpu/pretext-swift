@@ -14,6 +14,21 @@ final class ContentViewTests: XCTestCase {
         XCTAssertEqual(DemoNavigationStyle.forWidthClass(isCompact: nil, platform: .macOS), .toolbarPicker)
     }
 
+    func testMacOSToolbarPickerUsesCompactTitlesForAllScreens() {
+        XCTAssertEqual(
+            DemoScreen.availableCases(for: .macOS).map(\.toolbarPickerTitle),
+            [
+                "Aware",
+                "Editorial",
+                "Masonry",
+                "Chika",
+                "Script",
+                "Camera",
+                "Bench",
+            ]
+        )
+    }
+
     func testDemoScreenIncludesLiveCameraSilhouetteOption() {
         XCTAssertEqual(
             DemoScreen.allCases.map(\.title),

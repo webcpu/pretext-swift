@@ -86,6 +86,10 @@ enum DemoScreen: String, CaseIterable, Identifiable, Hashable {
         }
     }
 
+    var toolbarPickerTitle: String {
+        compactTitle
+    }
+
     var systemImage: String {
         switch self {
         case .situationalAwareness:
@@ -160,7 +164,10 @@ struct ContentView: View {
                     ToolbarItem(placement: .principal) {
                         Picker("Demo", selection: $selection) {
                             ForEach(availableScreens) { screen in
-                                Text(screen.title).tag(screen)
+                                Text(screen.toolbarPickerTitle)
+                                    .help(screen.title)
+                                    .accessibilityLabel(screen.title)
+                                    .tag(screen)
                             }
                         }
                         .pickerStyle(.segmented)
