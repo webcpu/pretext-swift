@@ -139,7 +139,7 @@ Expected: `DemoDeviceRunner.xcodeproj` regenerates with the camera usage descrip
 
 - [ ] **Step 4: Verify the runner still builds generically**
 
-Run: `xcodebuild -project Xcode/DemoDeviceRunner/DemoDeviceRunner.xcodeproj -scheme DemoDeviceRunner -destination 'generic/platform=iOS' -configuration Debug build`
+Run: `xcodebuild -project Xcode/DemoDeviceRunner/DemoDeviceRunner.xcodeproj -scheme DemoDeviceRunner -destination 'generic/platform=iOS' -configuration Release build`
 Expected: `** BUILD SUCCEEDED **`
 
 - [ ] **Step 5: If the user has approved commits in this repo, commit this chunk**

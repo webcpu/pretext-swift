@@ -1,7 +1,27 @@
 name: DemoDeviceRunner
 options:
+  defaultConfig: Release
   deploymentTarget:
     iOS: "18.0"
+schemes:
+  DemoDeviceRunner:
+    build:
+      targets:
+        DemoDeviceRunner: all
+    run:
+      config: Release
+      executable: DemoDeviceRunner
+    test:
+      config: Release
+    profile:
+      config: Release
+      executable: DemoDeviceRunner
+    analyze:
+      config: Release
+    archive:
+      config: Release
+    management:
+      shared: true
 targets:
   BenchmarkSupport:
     type: framework
