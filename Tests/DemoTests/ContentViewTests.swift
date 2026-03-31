@@ -2,6 +2,31 @@ import XCTest
 @testable import Demo
 
 final class ContentViewTests: XCTestCase {
+    func testWatchLaunchSelectionSeedsInitialNavigationPath() {
+        XCTAssertEqual(
+            demoInitialNavigationPath(launchSelection: .illustratedManuscript, platform: .watchOS),
+            [.illustratedManuscript]
+        )
+    }
+
+    func testPhoneAndDesktopLaunchSelectionDoNotSeedNavigationPath() {
+        XCTAssertEqual(
+            demoInitialNavigationPath(launchSelection: .illustratedManuscript, platform: .ios),
+            []
+        )
+        XCTAssertEqual(
+            demoInitialNavigationPath(launchSelection: .illustratedManuscript, platform: .macOS),
+            []
+        )
+    }
+
+    func testNilLaunchSelectionLeavesWatchNavigationPathEmpty() {
+        XCTAssertEqual(
+            demoInitialNavigationPath(launchSelection: nil, platform: .watchOS),
+            []
+        )
+    }
+
     func testIOSNavigationUsesTabBarInAnyWidthClass() {
         XCTAssertEqual(DemoNavigationStyle.forWidthClass(isCompact: true, platform: .ios), .tabBar)
         XCTAssertEqual(DemoNavigationStyle.forWidthClass(isCompact: false, platform: .ios), .tabBar)

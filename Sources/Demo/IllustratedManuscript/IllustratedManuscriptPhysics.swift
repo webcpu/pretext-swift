@@ -22,6 +22,7 @@ struct IllustratedFireParticle: Equatable {
 struct IllustratedDragonState: Equatable {
     var pageRect: WrapRect
     var scale: Double
+    var dragonScaleMultiplier: Double
     var segments: [IllustratedDragonSegment]
     var restSegments: [IllustratedDragonSegment]
     var fire: [IllustratedFireParticle] = []
@@ -58,13 +59,31 @@ func makeIllustratedDragonState(
         lineHeight: lineHeight,
         scale: illustratedManuscriptDropCapScale(for: platform)
     )
-    let headX = pageRect.x + margin + dropCap.obstacleRect.width * 0.8
-    let headY = pageRect.y + margin - 70 * scale
-    let restSegments = illustratedDragonRestSegments(headX: headX, headY: headY, scale: scale)
+    let headX: Double
+    let headY: Double
+    let dragonScaleMultiplier = illustratedDragonScaleMultiplier(platform: platform)
+
+    switch platform {
+    case .watchOS:
+        headX = pageRect.x + margin + dropCap.obstacleRect.width * 1.05 + illustratedDragonHeadXOffset(platform: platform)
+        headY = pageRect.y + margin - 82 * scale
+    case .ios, .macOS:
+        headX = pageRect.x + margin + dropCap.obstacleRect.width * 0.8
+        headY = pageRect.y + margin - 70 * scale
+    }
+
+    let restSegments = illustratedDragonRestSegments(
+        headX: headX,
+        headY: headY,
+        scale: scale,
+        dragonScaleMultiplier: dragonScaleMultiplier,
+        platform: platform
+    )
 
     return IllustratedDragonState(
         pageRect: pageRect,
         scale: scale,
+        dragonScaleMultiplier: dragonScaleMultiplier,
         segments: restSegments,
         restSegments: restSegments,
         jitterSeed: Double.random(in: 0...1_000)
@@ -146,7 +165,7 @@ func illustratedDragonMouthPoint(for state: IllustratedDragonState) -> WrapPoint
         return WrapPoint(x: state.pageRect.midX, y: state.pageRect.minY)
     }
 
-    let reach = IllustratedDragonPhysics.headToMouthFactor * state.scale
+    let reach = IllustratedDragonPhysics.headToMouthFactor * illustratedDragonEffectiveScale(for: state)
     return WrapPoint(
         x: head.x + cos(head.angle) * reach,
         y: head.y + sin(head.angle) * reach
@@ -165,26 +184,75 @@ func illustratedDragonFireWrapPadding() -> Double {
     IllustratedDragonPhysics.fireWrapPadding
 }
 
-private func illustratedDragonRestSegments(headX: Double, headY: Double, scale: Double) -> [IllustratedDragonSegment] {
+func illustratedDragonScaleMultiplier(
+    platform: DemoNavigationPlatform = .current
+) -> Double {
+    switch platform {
+    case .watchOS:
+        0.68
+    case .ios, .macOS:
+        1
+    }
+}
+
+func illustratedDragonHeadXOffset(
+    platform: DemoNavigationPlatform = .current
+) -> Double {
+    switch platform {
+    case .watchOS:
+        24
+    case .ios, .macOS:
+        0
+    }
+}
+
+func illustratedDragonEffectiveScale(for state: IllustratedDragonState) -> Double {
+    state.scale * state.dragonScaleMultiplier
+}
+
+private func illustratedDragonRestSegments(
+    headX: Double,
+    headY: Double,
+    scale: Double,
+    dragonScaleMultiplier: Double,
+    platform: DemoNavigationPlatform
+) -> [IllustratedDragonSegment] {
+    let effectiveScale = scale * dragonScaleMultiplier
     var segments: [IllustratedDragonSegment] = [
         IllustratedDragonSegment(
             x: headX,
             y: headY - 2,
             angle: 0,
-            width: illustratedDragonSegmentWidth(index: 0, scale: scale)
+            width: illustratedDragonSegmentWidth(index: 0, scale: effectiveScale)
         )
     ]
 
-    let spacing = IllustratedDragonPhysics.segmentSpacing * scale
+    let spacingMultiplier: Double
+    let maxAngle: Double
+    let angleExponent: Double
+
+    switch platform {
+    case .watchOS:
+        spacingMultiplier = 0.88
+        maxAngle = (.pi / 2) * 0.92
+        angleExponent = 1.65
+    case .ios, .macOS:
+        spacingMultiplier = 1
+        maxAngle = (.pi / 2) * 1.4
+        angleExponent = 1
+    }
+
+    let spacing = IllustratedDragonPhysics.segmentSpacing * spacingMultiplier * effectiveScale
     for index in 1..<IllustratedManuscriptConstants.dragonWidths.count {
-        let angle = -((Double(index) / Double(IllustratedManuscriptConstants.dragonWidths.count - 1)) * (.pi / 2) * 1.4)
+        let progress = Double(index) / Double(IllustratedManuscriptConstants.dragonWidths.count - 1)
+        let angle = -(pow(progress, angleExponent) * maxAngle)
         let previous = segments[index - 1]
         segments.append(
             IllustratedDragonSegment(
                 x: previous.x - cos(angle) * spacing,
                 y: previous.y - sin(angle) * spacing,
                 angle: angle,
-                width: illustratedDragonSegmentWidth(index: index, scale: scale)
+                width: illustratedDragonSegmentWidth(index: index, scale: effectiveScale)
             )
         )
     }
@@ -217,7 +285,7 @@ private func illustratedDragonFollowPointer(_ state: inout IllustratedDragonStat
         state.segments[0] = head
     }
 
-    let spacing = IllustratedDragonPhysics.segmentSpacing * state.scale
+    let spacing = IllustratedDragonPhysics.segmentSpacing * illustratedDragonEffectiveScale(for: state)
     for index in 1..<state.segments.count {
         let previous = state.segments[index - 1]
         var segment = state.segments[index]
@@ -250,7 +318,7 @@ private func illustratedDragonEmitFire(_ state: inout IllustratedDragonState) {
 
     for _ in 0..<particleCount {
         let angleJitter = Double.random(in: -0.125...0.125)
-        let speed = (35 + Double.random(in: 0...20)) * state.scale
+        let speed = (35 + Double.random(in: 0...20)) * illustratedDragonEffectiveScale(for: state)
         let angle = (state.segments.first?.angle ?? 0) + angleJitter
         state.fire.append(
             IllustratedFireParticle(
@@ -258,7 +326,7 @@ private func illustratedDragonEmitFire(_ state: inout IllustratedDragonState) {
                 y: mouth.y + Double.random(in: -2...2),
                 vx: cos(angle) * speed,
                 vy: sin(angle) * speed,
-                size: (8 + Double.random(in: 0...12)) * state.scale,
+                size: (8 + Double.random(in: 0...12)) * illustratedDragonEffectiveScale(for: state),
                 life: 1,
                 maxLife: Int.random(in: 12...17),
                 frame: 0,

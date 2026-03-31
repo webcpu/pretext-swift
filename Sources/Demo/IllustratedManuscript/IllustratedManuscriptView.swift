@@ -15,7 +15,8 @@ struct IllustratedManuscriptView: View {
                 let now = timeline.date.timeIntervalSinceReferenceDate * 1000
                 let metrics = illustratedManuscriptPageMetrics(
                     viewportWidth: proxy.size.width,
-                    viewportHeight: proxy.size.height
+                    viewportHeight: proxy.size.height,
+                    platform: platform
                 )
                 let state = resolvedDragonState(metrics: metrics, platform: platform)
                 let snapshot = evaluateIllustratedManuscriptSnapshot(
@@ -31,6 +32,7 @@ struct IllustratedManuscriptView: View {
                             snapshot: snapshot,
                             viewportSize: size,
                             now: now,
+                            platform: platform,
                             cg: cg
                         )
                     }
@@ -121,12 +123,18 @@ private func drawIllustratedManuscript(
     snapshot: IllustratedManuscriptSnapshot,
     viewportSize: CGSize,
     now: Double,
+    platform: DemoNavigationPlatform,
     cg: CGContext
 ) {
     cg.setFillColor(IllustratedManuscriptPalette.paper)
     cg.fill(CGRect(origin: .zero, size: viewportSize))
 
-    cg.draw(IllustratedManuscriptAssets.dropCapImage, in: snapshot.dropCapDrawRect.cgRect)
+    drawImage(
+        IllustratedManuscriptAssets.dropCapImage,
+        in: snapshot.dropCapDrawRect.cgRect,
+        platform: platform,
+        cg: cg
+    )
 
     let bodyFont = IllustratedManuscriptAssets.bodyFont(size: snapshot.pageMetrics.fontSize)
     for line in snapshot.bodyLines {
@@ -137,6 +145,7 @@ private func drawIllustratedManuscript(
                 at: CGPoint(x: line.x, y: drawY),
                 font: bodyFont,
                 color: IllustratedManuscriptPalette.ink,
+                platform: platform,
                 cg: cg
             )
             continue
@@ -148,13 +157,14 @@ private func drawIllustratedManuscript(
             y: drawY,
             font: bodyFont,
             particles: snapshot.dragonState.fire,
+            platform: platform,
             cg: cg
         )
     }
 
-    drawDragon(state: snapshot.dragonState, now: now, cg: cg)
+    drawDragon(state: snapshot.dragonState, now: now, platform: platform, cg: cg)
     drawFireParticles(snapshot.dragonState.fire, cg: cg)
-    drawAttribution(viewportSize: viewportSize, cg: cg)
+    drawAttribution(viewportSize: viewportSize, platform: platform, cg: cg)
 }
 
 private func drawText(
@@ -162,6 +172,7 @@ private func drawText(
     at point: CGPoint,
     font: CTFont,
     color: CGColor,
+    platform: DemoNavigationPlatform,
     cg: CGContext
 ) {
     let attributes: [NSAttributedString.Key: Any] = [
@@ -170,8 +181,15 @@ private func drawText(
     ]
     let attributed = NSAttributedString(string: text, attributes: attributes)
     let line = CTLineCreateWithAttributedString(attributed)
-    cg.textPosition = point
-    CTLineDraw(line, cg)
+    withIllustratedManuscriptLocalVerticalFlipIfNeeded(
+        around: point,
+        platform: platform,
+        cg: cg
+    ) {
+        cg.textMatrix = .identity
+        cg.textPosition = point
+        CTLineDraw(line, cg)
+    }
 }
 
 private func drawWarpedText(
@@ -180,6 +198,7 @@ private func drawWarpedText(
     y: Double,
     font: CTFont,
     particles: [IllustratedFireParticle],
+    platform: DemoNavigationPlatform,
     cg: CGContext
 ) {
     var cursorX = x
@@ -200,6 +219,7 @@ private func drawWarpedText(
                 at: CGPoint(x: cursorX, y: y),
                 font: font,
                 color: IllustratedManuscriptPalette.ink,
+                platform: platform,
                 cg: cg
             )
         } else {
@@ -218,6 +238,7 @@ private func drawWarpedText(
                 at: CGPoint(x: -width / 2, y: -(CTFontGetSize(font) * 0.43)),
                 font: font,
                 color: emberColor,
+                platform: platform,
                 cg: cg
             )
             cg.restoreGState()
@@ -262,9 +283,14 @@ private func particleInfluence(
     )
 }
 
-private func drawDragon(state: IllustratedDragonState, now: Double, cg: CGContext) {
+private func drawDragon(
+    state: IllustratedDragonState,
+    now: Double,
+    platform: DemoNavigationPlatform,
+    cg: CGContext
+) {
     let sprites = IllustratedManuscriptAssets.dragonSprites
-    let spriteScale = IllustratedManuscriptConstants.dragonSpriteScale * state.scale
+    let spriteScale = IllustratedManuscriptConstants.dragonSpriteScale * illustratedDragonEffectiveScale(for: state)
     let seconds = now / 1000
     let wingIndex = 5
 
@@ -274,7 +300,7 @@ private func drawDragon(state: IllustratedDragonState, now: Double, cg: CGContex
         cg.translateBy(x: wing.x, y: wing.y)
         cg.rotate(by: wing.angle + sin(seconds * 3) * 0.4)
         cg.scaleBy(x: spriteScale, y: spriteScale)
-        drawCenteredImage(sprites.wingBack, cg: cg)
+        drawCenteredImage(sprites.wingBack, platform: platform, cg: cg)
         cg.restoreGState()
     }
 
@@ -286,32 +312,36 @@ private func drawDragon(state: IllustratedDragonState, now: Double, cg: CGContex
         cg.scaleBy(x: spriteScale, y: spriteScale)
 
         if index == 0 {
-            cg.draw(
+            drawImage(
                 sprites.tongue,
                 in: CGRect(
                     x: Double(sprites.head.width) * 0.3,
                     y: -Double(sprites.tongue.height) / 2,
                     width: Double(sprites.tongue.width),
                     height: Double(sprites.tongue.height)
-                )
+                ),
+                platform: platform,
+                cg: cg
             )
-            cg.draw(
+            drawImage(
                 sprites.head,
                 in: CGRect(
                     x: -Double(sprites.head.width) * 0.45,
                     y: -Double(sprites.head.height) / 2,
                     width: Double(sprites.head.width),
                     height: Double(sprites.head.height)
-                )
+                ),
+                platform: platform,
+                cg: cg
             )
         } else if sprites.body.indices.contains(index - 1) {
-            drawCenteredImage(sprites.body[index - 1], cg: cg)
+            drawCenteredImage(sprites.body[index - 1], platform: platform, cg: cg)
         }
 
         if index == wingIndex {
             cg.saveGState()
             cg.rotate(by: -sin(seconds * 3 + 0.5) * 0.4)
-            drawCenteredImage(sprites.wingFront, cg: cg)
+            drawCenteredImage(sprites.wingFront, platform: platform, cg: cg)
             cg.restoreGState()
         }
 
@@ -319,15 +349,63 @@ private func drawDragon(state: IllustratedDragonState, now: Double, cg: CGContex
     }
 }
 
-private func drawCenteredImage(_ image: CGImage, cg: CGContext) {
-    cg.draw(
+func illustratedManuscriptUsesLocalVerticalFlipForRawCG(
+    platform: DemoNavigationPlatform = .current
+) -> Bool {
+    platform == .watchOS
+}
+
+private func withIllustratedManuscriptLocalVerticalFlipIfNeeded(
+    around anchor: CGPoint,
+    platform: DemoNavigationPlatform,
+    cg: CGContext,
+    draw: () -> Void
+) {
+    guard illustratedManuscriptUsesLocalVerticalFlipForRawCG(platform: platform) else {
+        draw()
+        return
+    }
+
+    // watchOS Canvas uses a vertically flipped user space for raw CG image/text draws.
+    // Flip around each element anchor so the page stays in top-left screen coordinates.
+    cg.saveGState()
+    cg.translateBy(x: anchor.x, y: anchor.y)
+    cg.scaleBy(x: 1, y: -1)
+    cg.translateBy(x: -anchor.x, y: -anchor.y)
+    draw()
+    cg.restoreGState()
+}
+
+private func drawImage(
+    _ image: CGImage,
+    in rect: CGRect,
+    platform: DemoNavigationPlatform,
+    cg: CGContext
+) {
+    withIllustratedManuscriptLocalVerticalFlipIfNeeded(
+        around: CGPoint(x: rect.midX, y: rect.midY),
+        platform: platform,
+        cg: cg
+    ) {
+        cg.draw(image, in: rect)
+    }
+}
+
+private func drawCenteredImage(
+    _ image: CGImage,
+    platform: DemoNavigationPlatform,
+    cg: CGContext
+) {
+    drawImage(
         image,
         in: CGRect(
             x: -Double(image.width) / 2,
             y: -Double(image.height) / 2,
             width: Double(image.width),
             height: Double(image.height)
-        )
+        ),
+        platform: platform,
+        cg: cg
     )
 }
 
@@ -367,7 +445,11 @@ private func drawFireParticles(_ particles: [IllustratedFireParticle], cg: CGCon
     }
 }
 
-private func drawAttribution(viewportSize: CGSize, cg: CGContext) {
+private func drawAttribution(
+    viewportSize: CGSize,
+    platform: DemoNavigationPlatform,
+    cg: CGContext
+) {
     let font = IllustratedManuscriptAssets.bodyFont(size: 14)
     let attributes: [NSAttributedString.Key: Any] = [
         .font: font,
@@ -376,11 +458,19 @@ private func drawAttribution(viewportSize: CGSize, cg: CGContext) {
     let attributed = NSAttributedString(string: IllustratedManuscriptAssets.attribution, attributes: attributes)
     let line = CTLineCreateWithAttributedString(attributed)
     let width = CTLineGetTypographicBounds(line, nil, nil, nil)
-    cg.textPosition = CGPoint(
+    let point = CGPoint(
         x: viewportSize.width / 2 - width / 2,
         y: viewportSize.height - 36
     )
-    CTLineDraw(line, cg)
+    withIllustratedManuscriptLocalVerticalFlipIfNeeded(
+        around: point,
+        platform: platform,
+        cg: cg
+    ) {
+        cg.textMatrix = .identity
+        cg.textPosition = point
+        CTLineDraw(line, cg)
+    }
 }
 
 private func randomOffset(seed: Int) -> Double {

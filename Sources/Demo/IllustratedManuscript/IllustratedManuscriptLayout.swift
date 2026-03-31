@@ -24,20 +24,26 @@ struct IllustratedManuscriptSnapshot: Equatable {
 
 func illustratedManuscriptPageMetrics(
     viewportWidth: Double,
-    viewportHeight: Double
+    viewportHeight: Double,
+    platform: DemoNavigationPlatform = .current
 ) -> IllustratedManuscriptPageMetrics {
+    let isWatchSizedViewport = platform == .watchOS
     let pageWidth = min(IllustratedManuscriptConstants.basePageWidth, viewportWidth - 40)
     let scale = pageWidth / IllustratedManuscriptConstants.basePageWidth
-    let pageHeight = min(IllustratedManuscriptConstants.maxPageHeight, viewportHeight - 60)
+    let pageHeight = min(
+        IllustratedManuscriptConstants.maxPageHeight,
+        viewportHeight - (isWatchSizedViewport ? 40 : 60)
+    )
     let margin = round(IllustratedManuscriptConstants.baseMargin * scale)
     let fontScale = 0.4 + 0.6 * scale
-    let fontSize = max(14.0, round(IllustratedManuscriptConstants.baseFontSize * fontScale))
-    let lineHeight = max(22.0, round(IllustratedManuscriptConstants.baseLineHeight * fontScale))
+    let fontSize = max(isWatchSizedViewport ? 12.0 : 14.0, round(IllustratedManuscriptConstants.baseFontSize * fontScale))
+    let lineHeight = max(isWatchSizedViewport ? 20.0 : 22.0, round(IllustratedManuscriptConstants.baseLineHeight * fontScale))
+    let pageY = isWatchSizedViewport ? 20.0 : round(max(20, (viewportHeight - pageHeight) / 2))
 
     return IllustratedManuscriptPageMetrics(
         pageRect: WrapRect(
             x: round((viewportWidth - pageWidth) / 2),
-            y: round(max(20, (viewportHeight - pageHeight) / 2)),
+            y: pageY,
             width: pageWidth,
             height: pageHeight
         ),
@@ -56,7 +62,8 @@ func evaluateIllustratedManuscriptSnapshot(
 ) -> IllustratedManuscriptSnapshot {
     let metrics = illustratedManuscriptPageMetrics(
         viewportWidth: viewportWidth,
-        viewportHeight: viewportHeight
+        viewportHeight: viewportHeight,
+        platform: platform
     )
     let dropCap = IllustratedManuscriptAssets.dropCapGeometry(
         pageRect: metrics.pageRect,

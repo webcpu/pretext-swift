@@ -110,6 +110,17 @@ enum DemoScreen: String, CaseIterable, Identifiable, Hashable {
     }
 }
 
+func demoInitialNavigationPath(
+    launchSelection: DemoScreen?,
+    platform: DemoNavigationPlatform = .current
+) -> [DemoScreen] {
+    guard platform == .watchOS, let launchSelection else {
+        return []
+    }
+
+    return [launchSelection]
+}
+
 private struct WatchUnsupportedDemoView: View {
     let title: String
 
@@ -139,7 +150,27 @@ private struct WatchUnsupportedDemoView: View {
 
 struct ContentView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
-    @State private var selection: DemoScreen = DemoScreen.launchSelection() ?? DemoScreen.defaultSelection()
+    @State private var selection: DemoScreen
+    @State private var watchPath: [DemoScreen]
+
+    init(
+        arguments: [String] = CommandLine.arguments,
+        platform: DemoNavigationPlatform = .current
+    ) {
+        let launchSelection = DemoScreen.launchSelection(
+            arguments: arguments,
+            platform: platform
+        )
+        _selection = State(
+            initialValue: launchSelection ?? DemoScreen.defaultSelection(for: platform)
+        )
+        _watchPath = State(
+            initialValue: demoInitialNavigationPath(
+                launchSelection: launchSelection,
+                platform: platform
+            )
+        )
+    }
 
     var body: some View {
         switch DemoNavigationStyle.forWidthClass(isCompact: isCompactWidth, platform: .current) {
@@ -176,7 +207,7 @@ struct ContentView: View {
                 }
             #endif
         case .watchList:
-            NavigationStack {
+            NavigationStack(path: $watchPath) {
                 List(availableScreens) { screen in
                     NavigationLink(value: screen) {
                         Label(screen.title, systemImage: screen.systemImage)

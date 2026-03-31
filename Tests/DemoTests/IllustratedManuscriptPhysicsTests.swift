@@ -2,6 +2,45 @@ import XCTest
 @testable import Demo
 
 final class IllustratedManuscriptPhysicsTests: XCTestCase {
+    func testWatchDragonRestPoseScalesWholeDragonDownAndShiftsRight() {
+        let metrics = illustratedManuscriptPageMetrics(
+            viewportWidth: 208,
+            viewportHeight: 248,
+            platform: .watchOS
+        )
+        let state = makeIllustratedDragonState(
+            pageRect: metrics.pageRect,
+            scale: metrics.scale,
+            platform: .watchOS
+        )
+        let margin = round(IllustratedManuscriptConstants.baseMargin * metrics.scale)
+        let lineHeightScale = 0.4 + 0.6 * metrics.scale
+        let lineHeight = max(22.0, round(IllustratedManuscriptConstants.baseLineHeight * lineHeightScale))
+        let dropCap = IllustratedManuscriptAssets.dropCapGeometry(
+            pageRect: WrapRect(x: 0, y: 0, width: metrics.pageRect.width, height: metrics.pageRect.height),
+            margin: margin,
+            lineHeight: lineHeight,
+            scale: illustratedManuscriptDropCapScale(for: .watchOS)
+        )
+
+        XCTAssertEqual(state.dragonScaleMultiplier, 0.68, accuracy: 0.001)
+        XCTAssertEqual(
+            state.segments[0].x,
+            metrics.pageRect.x + margin + dropCap.obstacleRect.width * 1.05 + 24,
+            accuracy: 0.001
+        )
+        XCTAssertEqual(
+            state.segments[0].width,
+            IllustratedManuscriptConstants.dragonWidths[0] * IllustratedManuscriptConstants.dragonSpriteScale * metrics.scale * 0.68,
+            accuracy: 0.001
+        )
+        XCTAssertEqual(
+            distance(state.segments[0], state.segments[1]),
+            30.0 * 0.88 * metrics.scale * 0.68,
+            accuracy: 0.001
+        )
+    }
+
     func testDragonReturnsTowardRestAfterIdleTimeout() {
         let metrics = illustratedManuscriptPageMetrics(
             viewportWidth: 1440,

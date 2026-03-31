@@ -37,8 +37,8 @@ final class DemoWatchCatalogTests: XCTestCase {
         )
     }
 
-    func testWatchNavigationDestinationStaysWithinSafeArea() {
-        XCTAssertTrue(demoNavigationDestinationUsesSafeArea(platform: .watchOS))
+    func testWatchNavigationDestinationUsesNavigationBarRegion() {
+        XCTAssertFalse(demoNavigationDestinationUsesSafeArea(platform: .watchOS))
         XCTAssertFalse(demoNavigationDestinationUsesSafeArea(platform: .ios))
         XCTAssertFalse(demoNavigationDestinationUsesSafeArea(platform: .macOS))
     }

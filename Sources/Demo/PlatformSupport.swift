@@ -50,7 +50,7 @@ enum DemoNavigationPlatform: Equatable {
 func demoNavigationDestinationUsesSafeArea(
     platform: DemoNavigationPlatform = .current
 ) -> Bool {
-    platform == .watchOS
+    false
 }
 
 func demoNavigationDestinationShowsTitle(
