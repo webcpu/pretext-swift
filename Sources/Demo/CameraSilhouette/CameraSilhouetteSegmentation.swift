@@ -1,3 +1,4 @@
+#if !os(watchOS)
 import CoreGraphics
 import CoreVideo
 import Foundation
@@ -542,4 +543,5 @@ final class CameraSilhouetteSegmentation: @unchecked Sendable {
         )
     }
 }
+#endif
 #endif

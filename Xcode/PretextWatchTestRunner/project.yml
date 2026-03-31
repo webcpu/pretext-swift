@@ -1,0 +1,49 @@
+name: PretextWatchTestRunner
+options:
+  deploymentTarget:
+    watchOS: "11.0"
+schemes:
+  PretextWatchTests:
+    build:
+      targets:
+        PretextWatchHostApp: all
+        PretextWatchTests: all
+    test:
+      config: Debug
+      targets:
+        - name: PretextWatchTests
+    analyze:
+      config: Debug
+targets:
+  PretextWatchHostApp:
+    type: application
+    platform: watchOS
+    deploymentTarget: "11.0"
+    sources:
+      - path: Sources
+    settings:
+      base:
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: NA5BE2D52P
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_WKWatchOnly: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.liang.pretextswift.pretextwatchhost
+  PretextWatchTests:
+    type: bundle.unit-test
+    platform: watchOS
+    deploymentTarget: "11.0"
+    sources:
+      - path: ../../Tests/PretextTests
+    dependencies:
+      - target: PretextWatchHostApp
+      - package: PretextSwift
+        product: Pretext
+    settings:
+      base:
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: NA5BE2D52P
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.liang.pretextswift.pretextwatchtests
+packages:
+  PretextSwift:
+    path: ../..

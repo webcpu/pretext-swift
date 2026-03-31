@@ -1,3 +1,4 @@
+#if !os(watchOS)
 import Foundation
 
 #if canImport(AVFoundation)
@@ -38,6 +39,11 @@ func cameraSilhouetteCapturePolicy(
             prefersFrontCamera: false,
             usesPortraitOrientation: false
         )
+    case .watchOS:
+        CameraSilhouetteCapturePolicy(
+            prefersFrontCamera: false,
+            usesPortraitOrientation: true
+        )
     }
 }
 
@@ -51,6 +57,8 @@ func cameraSilhouetteShouldMirrorCapture(
         true
     case .macOS:
         devicePosition == .front
+    case .watchOS:
+        false
     }
 }
 
@@ -224,4 +232,5 @@ private func cameraSilhouettePreferredCamera(
     return AVCaptureDevice.default(for: .video)
         ?? AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .front)
 }
+#endif
 #endif

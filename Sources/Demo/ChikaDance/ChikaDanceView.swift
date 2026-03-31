@@ -1,3 +1,4 @@
+#if !os(watchOS)
 import AVFoundation
 import CoreVideo
 import Pretext
@@ -22,7 +23,7 @@ private final class VideoFrameProvider: @unchecked Sendable {
         debugInfo = "loading..."
 
         let item = AVPlayerItem(asset: AVURLAsset(url: url))
-        let attributes: [String: Any] = [
+        let attributes: [String: any Sendable] = [
             String(kCVPixelBufferPixelFormatTypeKey): kCVPixelFormatType_32BGRA,
         ]
         let output = AVPlayerItemVideoOutput(pixelBufferAttributes: attributes)
@@ -281,3 +282,4 @@ private struct ChikaDanceStatsBar: View {
         }
     }
 }
+#endif

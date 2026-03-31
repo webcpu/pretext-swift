@@ -39,7 +39,7 @@ func runBatchPrepareAndLayout() -> BenchmarkResult {
     }
 
     // SwiftUI: NSHostingView + fittingSize for each text
-    let swiftUIMs = measureMedianMainActor {
+    let swiftUIMs = measureSwiftUIBenchmark {
         for text in texts {
             _ = swiftUIMeasureHeight(text: text, font: displayFont, width: width)
         }
@@ -51,7 +51,7 @@ func runBatchPrepareAndLayout() -> BenchmarkResult {
         coreTextMs: coreTextMs,
         swiftUIMs: swiftUIMs,
         speedupVsCoreText: coreTextMs / max(pretextMs, 0.001),
-        speedupVsSwiftUI: swiftUIMs / max(pretextMs, 0.001)
+        speedupVsSwiftUI: swiftUIMs.map { $0 / max(pretextMs, 0.001) }
     )
 }
 
@@ -87,7 +87,7 @@ func runReflowAtDifferentWidths() -> BenchmarkResult {
     }
 
     // SwiftUI: create hosting views once, update width each time
-    let swiftUIMs = measureMedianMainActor {
+    let swiftUIMs = measureSwiftUIBenchmark {
         // SwiftUI is so slow at this scale that we test 500 x 10 widths instead
         let sampleWidths = Array(widths.prefix(10))
         for width in sampleWidths {
@@ -97,7 +97,7 @@ func runReflowAtDifferentWidths() -> BenchmarkResult {
         }
     }
     // Scale up to match 100 widths for fair comparison
-    let swiftUIScaled = swiftUIMs * 10.0
+    let swiftUIScaled = swiftUIMs.map { $0 * 10.0 }
 
     return BenchmarkResult(
         name: "Reflow 100 Widths (50k calls)",
@@ -105,7 +105,7 @@ func runReflowAtDifferentWidths() -> BenchmarkResult {
         coreTextMs: coreTextMs,
         swiftUIMs: swiftUIScaled,
         speedupVsCoreText: coreTextMs / max(pretextMs, 0.001),
-        speedupVsSwiftUI: swiftUIScaled / max(pretextMs, 0.001)
+        speedupVsSwiftUI: swiftUIScaled.map { $0 / max(pretextMs, 0.001) }
     )
 }
 
@@ -186,7 +186,7 @@ func runInterleavedMeasureMutate() -> BenchmarkResult {
     }
 
     // SwiftUI: create new hosting view each time (simulating content change + measure)
-    let swiftUIMs = measureMedianMainActor {
+    let swiftUIMs = measureSwiftUIBenchmark {
         for i in 0..<500 {
             let text = texts[i % texts.count]
             _ = swiftUIMeasureHeight(text: text, font: displayFont, width: width)
@@ -199,7 +199,7 @@ func runInterleavedMeasureMutate() -> BenchmarkResult {
         coreTextMs: coreTextMs,
         swiftUIMs: swiftUIMs,
         speedupVsCoreText: coreTextMs / max(pretextMs, 0.001),
-        speedupVsSwiftUI: swiftUIMs / max(pretextMs, 0.001)
+        speedupVsSwiftUI: swiftUIMs.map { $0 / max(pretextMs, 0.001) }
     )
 }
 
@@ -230,7 +230,7 @@ func runMasonryHeights() -> BenchmarkResult {
     }
 
     // SwiftUI: NSHostingView + fittingSize for each text
-    let swiftUIMs = measureMedianMainActor {
+    let swiftUIMs = measureSwiftUIBenchmark {
         for text in texts {
             _ = swiftUIMeasureHeight(text: text, font: displayFont, width: colWidth)
         }
@@ -242,7 +242,7 @@ func runMasonryHeights() -> BenchmarkResult {
         coreTextMs: coreTextMs,
         swiftUIMs: swiftUIMs,
         speedupVsCoreText: coreTextMs / max(pretextMs, 0.001),
-        speedupVsSwiftUI: swiftUIMs / max(pretextMs, 0.001)
+        speedupVsSwiftUI: swiftUIMs.map { $0 / max(pretextMs, 0.001) }
     )
 }
 

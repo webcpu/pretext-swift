@@ -1,0 +1,74 @@
+name: DemoWatchRunner
+options:
+  defaultConfig: Release
+  deploymentTarget:
+    watchOS: "11.0"
+schemes:
+  DemoWatchRunner:
+    build:
+      targets:
+        DemoWatchRunner: all
+    run:
+      config: Release
+      executable: DemoWatchRunner
+    test:
+      config: Release
+    profile:
+      config: Release
+      executable: DemoWatchRunner
+    analyze:
+      config: Release
+    archive:
+      config: Release
+    management:
+      shared: true
+targets:
+  BenchmarkSupport:
+    type: framework
+    platform: watchOS
+    deploymentTarget: "11.0"
+    sources:
+      - path: ../../Sources/Benchmark
+    dependencies:
+      - package: PretextSwift
+        product: Pretext
+      - package: PretextSwift
+        product: PretextUI
+    settings:
+      base:
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: NA5BE2D52P
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.liang.pretextswift.benchmarksupport.watchos
+        SKIP_INSTALL: YES
+  DemoWatchRunner:
+    type: application
+    platform: watchOS
+    deploymentTarget: "11.0"
+    sources:
+      - path: ../../Sources/Demo
+        excludes:
+          - CameraSilhouette
+          - ChikaDance
+          - Resources/camera-silhouette
+          - Resources/dance.mp4
+      - path: ../DemoDeviceRunner/DemoBundleModuleShim.swift
+    dependencies:
+      - target: BenchmarkSupport
+      - package: PretextSwift
+        product: Pretext
+      - package: PretextSwift
+        product: PretextUI
+    settings:
+      base:
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: NA5BE2D52P
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Demo
+        INFOPLIST_KEY_WKWatchOnly: YES
+        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/Frameworks"
+        PRODUCT_BUNDLE_IDENTIFIER: com.liang.pretextswift.demowatchrunner
+        PRODUCT_NAME: Demo
+packages:
+  PretextSwift:
+    path: ../..

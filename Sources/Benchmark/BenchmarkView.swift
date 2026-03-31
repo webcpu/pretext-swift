@@ -67,8 +67,15 @@ public struct BenchmarkView: View {
         }
     }
 
+    private var presentationPlatform: BenchmarkPresentationPlatform {
+        .current
+    }
+
     private var layoutStyle: BenchmarkResultsLayoutStyle {
-        BenchmarkResultsLayoutStyle.forWidthClass(isCompact: horizontalSizeClass.map { $0 == .compact })
+        BenchmarkResultsLayoutStyle.forWidthClass(
+            isCompact: horizontalSizeClass.map { $0 == .compact },
+            platform: presentationPlatform
+        )
     }
 
     private var header: some View {
@@ -79,10 +86,10 @@ public struct BenchmarkView: View {
                 .foregroundStyle(.white.opacity(0.5))
 
             Text("Pretext vs Core Text vs SwiftUI")
-                .font(.system(size: layoutStyle == .cards ? 20 : 28, weight: .bold, design: .default))
+                .font(.system(size: headlineFontSize, weight: .bold, design: .default))
                 .foregroundStyle(.white)
                 .multilineTextAlignment(.center)
-                .padding(.horizontal, layoutStyle == .cards ? 20 : 0)
+                .padding(.horizontal, layoutStyle == .table ? 0 : 20)
 
             runButton
         }
@@ -117,9 +124,10 @@ public struct BenchmarkView: View {
         VStack(spacing: 8) {
             Text("5 tests comparing text layout performance")
                 .foregroundStyle(.white.opacity(0.4))
-            Text("Batch \u{00B7} Reflow \u{00B7} Line-by-Line \u{00B7} Thrashing \u{00B7} Masonry")
+            Text(emptyStateDetailText)
                 .font(.system(size: 13, design: .monospaced))
                 .foregroundStyle(.white.opacity(0.25))
+                .multilineTextAlignment(.center)
         }
     }
 
@@ -177,7 +185,23 @@ public struct BenchmarkView: View {
                     .padding(.horizontal, 16)
                     .padding(.bottom, 16)
                 }
+                #if !os(watchOS)
                 .scrollBounceBehavior(.basedOnSize)
+                #endif
+            case .watchCards:
+                ScrollView {
+                    VStack(spacing: 10) {
+                        if results.isEmpty {
+                            compactResultsPlaceholder
+                        } else {
+                            ForEach(results) { result in
+                                compactResultCard(result)
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.bottom, 12)
+                }
             }
         }
     }
@@ -206,9 +230,12 @@ public struct BenchmarkView: View {
                     Text("Benchmark results will appear here.")
                         .font(.system(size: 14, weight: .medium))
                         .foregroundStyle(.white.opacity(0.7))
-                    Text("Compact iPhone uses cards so every metric stays visible.")
+                    Text(layoutStyle == .watchCards
+                        ? "Apple Watch uses a simplified card stack."
+                        : "Compact iPhone uses cards so every metric stays visible.")
                         .font(.system(size: 12))
                         .foregroundStyle(.white.opacity(0.35))
+                        .multilineTextAlignment(.center)
                 }
                 .padding(20)
             }
@@ -227,14 +254,11 @@ public struct BenchmarkView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             LazyVGrid(
-                columns: [
-                    GridItem(.flexible(minimum: 0), spacing: 10),
-                    GridItem(.flexible(minimum: 0), spacing: 10),
-                ],
+                columns: compactGridColumns,
                 alignment: .leading,
                 spacing: 10
             ) {
-                ForEach(compactBenchmarkMetrics(for: result)) { metric in
+                ForEach(compactBenchmarkMetrics(for: result, platform: presentationPlatform)) { metric in
                     compactMetricTile(metric)
                 }
             }
@@ -256,7 +280,7 @@ public struct BenchmarkView: View {
                 .foregroundStyle(.white.opacity(0.35))
 
             Text(metric.value)
-                .font(.system(size: 16, weight: .semibold, design: .monospaced))
+                .font(.system(size: layoutStyle == .watchCards ? 14 : 16, weight: .semibold, design: .monospaced))
                 .foregroundStyle(metric.tone.color)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
@@ -266,6 +290,18 @@ public struct BenchmarkView: View {
         .padding(.vertical, 10)
         .background(.white.opacity(0.04))
         .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+
+    private var compactGridColumns: [GridItem] {
+        switch layoutStyle {
+        case .watchCards:
+            [GridItem(.flexible(minimum: 0), spacing: 10)]
+        case .table, .cards:
+            [
+                GridItem(.flexible(minimum: 0), spacing: 10),
+                GridItem(.flexible(minimum: 0), spacing: 10),
+            ]
+        }
     }
 
     private func tableCell(
@@ -283,11 +319,11 @@ public struct BenchmarkView: View {
 
     private var bottomBar: some View {
         HStack {
-            Text("Median of 5 runs · 1 warmup · ContinuousClock timing")
+            Text(bottomBarText)
                 .font(.system(size: 11))
                 .foregroundStyle(.white.opacity(0.25))
             Spacer()
-            if !results.isEmpty {
+            if !results.isEmpty, layoutStyle != .watchCards {
                 Text("Lower is better (ms)")
                     .font(.system(size: 11))
                     .foregroundStyle(.white.opacity(0.25))
@@ -296,6 +332,35 @@ public struct BenchmarkView: View {
         .padding(.horizontal, 24)
         .padding(.vertical, 10)
         .background(.black.opacity(0.3))
+    }
+
+    private var headlineFontSize: CGFloat {
+        switch layoutStyle {
+        case .table:
+            28
+        case .cards:
+            20
+        case .watchCards:
+            17
+        }
+    }
+
+    private var emptyStateDetailText: String {
+        switch layoutStyle {
+        case .watchCards:
+            "Batch \u{00B7} Reflow \u{00B7} Line-by-Line"
+        case .table, .cards:
+            "Batch \u{00B7} Reflow \u{00B7} Line-by-Line \u{00B7} Thrashing \u{00B7} Masonry"
+        }
+    }
+
+    private var bottomBarText: String {
+        switch layoutStyle {
+        case .watchCards:
+            "Median of 5 runs"
+        case .table, .cards:
+            "Median of 5 runs \u{00B7} 1 warmup \u{00B7} ContinuousClock timing"
+        }
     }
 
     private func runAllBenchmarks() {

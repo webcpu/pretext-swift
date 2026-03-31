@@ -5,6 +5,8 @@ import CoreGraphics
 import AppKit
 #elseif os(iOS)
 import UIKit
+#elseif os(watchOS)
+import ImageIO
 #endif
 
 struct LoadedLogo {
@@ -71,6 +73,15 @@ private func loadBundledRasterImage(named resourceName: String) throws -> DemoPl
         throw LogoHullError.missingResource(resourceName)
     }
 
+    #if os(watchOS)
+    guard
+        let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+        let image = CGImageSourceCreateImageAtIndex(source, 0, nil)
+    else {
+        throw LogoHullError.invalidSVG("Unable to load \(resourceName).png")
+    }
+    return image
+    #else
     guard let image = DemoPlatformImage(contentsOfFile: url.path) else {
         throw LogoHullError.invalidSVG("Unable to load \(resourceName).png")
     }
@@ -82,10 +93,11 @@ private func loadBundledRasterImage(named resourceName: String) throws -> DemoPl
     #endif
 
     return image
+    #endif
 }
 
 func makeWrapHull(from image: DemoPlatformImage, smoothRadius: Int, mode: WrapHullMode) -> [WrapPoint] {
-    let imageSize = image.size
+    let imageSize = platformImageSize(from: image)
     let aspect = max(0.1, imageSize.width / max(1, imageSize.height))
     let maxDimension = 320.0
     let width = aspect >= 1
@@ -229,8 +241,18 @@ func makeWrapHull(from image: DemoPlatformImage, smoothRadius: Int, mode: WrapHu
 private func platformCGImage(from image: DemoPlatformImage) -> CGImage? {
     #if os(macOS)
     image.cgImage(forProposedRect: nil, context: nil, hints: nil)
-    #else
+    #elseif os(iOS)
     image.cgImage
+    #else
+    image
+    #endif
+}
+
+private func platformImageSize(from image: DemoPlatformImage) -> CGSize {
+    #if os(macOS) || os(iOS)
+    image.size
+    #else
+    CGSize(width: image.width, height: image.height)
     #endif
 }
 
@@ -249,7 +271,7 @@ private func makeFallbackImage() -> DemoPlatformImage {
     path.fill()
     image.unlockFocus()
     return image
-    #else
+    #elseif os(iOS)
     let renderer = UIGraphicsImageRenderer(size: size)
     return renderer.image { _ in
         UIColor.white.setFill()
@@ -261,5 +283,28 @@ private func makeFallbackImage() -> DemoPlatformImage {
         path.close()
         path.fill()
     }
+    #elseif os(watchOS)
+    let width = Int(size.width)
+    let height = Int(size.height)
+    let context = CGContext(
+        data: nil,
+        width: width,
+        height: height,
+        bitsPerComponent: 8,
+        bytesPerRow: 0,
+        space: CGColorSpaceCreateDeviceRGB(),
+        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+    )!
+    context.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 1))
+    context.beginPath()
+    context.move(to: CGPoint(x: 80, y: 10))
+    context.addLine(to: CGPoint(x: 150, y: 80))
+    context.addLine(to: CGPoint(x: 80, y: 150))
+    context.addLine(to: CGPoint(x: 10, y: 80))
+    context.closePath()
+    context.fillPath()
+    return context.makeImage()!
+    #else
+    fatalError("Unsupported platform")
     #endif
 }

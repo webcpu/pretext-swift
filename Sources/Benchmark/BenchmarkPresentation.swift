@@ -1,11 +1,33 @@
 import SwiftUI
 
+enum BenchmarkPresentationPlatform: Equatable {
+    case standard
+    case watch
+
+    static var current: Self {
+        #if os(watchOS)
+        .watch
+        #else
+        .standard
+        #endif
+    }
+}
+
 enum BenchmarkResultsLayoutStyle: Equatable {
     case table
     case cards
+    case watchCards
 
-    static func forWidthClass(isCompact: Bool?) -> Self {
-        isCompact == true ? .cards : .table
+    static func forWidthClass(
+        isCompact: Bool?,
+        platform: BenchmarkPresentationPlatform = .current
+    ) -> Self {
+        switch platform {
+        case .standard:
+            isCompact == true ? .cards : .table
+        case .watch:
+            .watchCards
+        }
     }
 }
 
@@ -42,26 +64,39 @@ struct BenchmarkMetricDisplay: Equatable, Identifiable {
     var tone: BenchmarkMetricTone
 }
 
-func compactBenchmarkMetrics(for result: BenchmarkResult) -> [BenchmarkMetricDisplay] {
-    [
+func compactBenchmarkMetrics(
+    for result: BenchmarkResult,
+    platform: BenchmarkPresentationPlatform = .current
+) -> [BenchmarkMetricDisplay] {
+    let leadingMetrics = [
         BenchmarkMetricDisplay(label: "Pretext", value: formatBenchmarkMs(result.pretextMs), tone: .accent),
         BenchmarkMetricDisplay(label: "Core Text", value: formatBenchmarkMs(result.coreTextMs), tone: .standard),
-        BenchmarkMetricDisplay(
-            label: "SwiftUI",
-            value: result.swiftUIMs.map(formatBenchmarkMs) ?? "—",
-            tone: result.swiftUIMs == nil ? .muted : .standard
-        ),
-        BenchmarkMetricDisplay(
-            label: "Vs CT",
-            value: formatBenchmarkSpeedup(result.speedupVsCoreText),
-            tone: benchmarkSpeedupTone(result.speedupVsCoreText)
-        ),
-        BenchmarkMetricDisplay(
-            label: "Vs SUI",
-            value: result.speedupVsSwiftUI.map(formatBenchmarkSpeedup) ?? "—",
-            tone: result.speedupVsSwiftUI.map(benchmarkSpeedupTone) ?? .muted
-        ),
     ]
+    let speedupMetric = BenchmarkMetricDisplay(
+        label: "Vs CT",
+        value: formatBenchmarkSpeedup(result.speedupVsCoreText),
+        tone: benchmarkSpeedupTone(result.speedupVsCoreText)
+    )
+
+    switch platform {
+    case .watch:
+        return leadingMetrics + [speedupMetric]
+    case .standard:
+        return leadingMetrics
+            + [
+                BenchmarkMetricDisplay(
+                    label: "SwiftUI",
+                    value: result.swiftUIMs.map(formatBenchmarkMs) ?? "—",
+                    tone: result.swiftUIMs == nil ? .muted : .standard
+                ),
+                speedupMetric,
+                BenchmarkMetricDisplay(
+                    label: "Vs SUI",
+                    value: result.speedupVsSwiftUI.map(formatBenchmarkSpeedup) ?? "—",
+                    tone: result.speedupVsSwiftUI.map(benchmarkSpeedupTone) ?? .muted
+                ),
+            ]
+    }
 }
 
 func formatBenchmarkMs(_ ms: Double) -> String {

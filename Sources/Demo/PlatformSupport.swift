@@ -6,11 +6,15 @@ typealias DemoPlatformImage = NSImage
 #elseif os(iOS)
 import UIKit
 typealias DemoPlatformImage = UIImage
+#elseif os(watchOS)
+import CoreGraphics
+typealias DemoPlatformImage = CGImage
 #endif
 
 enum DemoNavigationStyle: Equatable {
     case tabBar
     case toolbarPicker
+    case watchList
 
     static func forWidthClass(
         isCompact _: Bool?,
@@ -21,6 +25,8 @@ enum DemoNavigationStyle: Equatable {
             .tabBar
         case .macOS:
             .toolbarPicker
+        case .watchOS:
+            .watchList
         }
     }
 }
@@ -28,10 +34,13 @@ enum DemoNavigationStyle: Equatable {
 enum DemoNavigationPlatform: Equatable {
     case ios
     case macOS
+    case watchOS
 
     static var current: Self {
         #if os(macOS)
         .macOS
+        #elseif os(watchOS)
+        .watchOS
         #else
         .ios
         #endif
@@ -64,8 +73,10 @@ extension Image {
     init(platformImage image: DemoPlatformImage) {
         #if os(macOS)
         self = Image(nsImage: image)
-        #else
+        #elseif os(iOS)
         self = Image(uiImage: image)
+        #else
+        self = Image(decorative: image, scale: 1)
         #endif
     }
 }
@@ -209,6 +220,14 @@ private struct DemoOptionalCursorModifier: ViewModifier {
 }
 
 extension View {
+    func demoTextSelectionEnabled() -> some View {
+        #if os(watchOS)
+        self
+        #else
+        textSelection(.enabled)
+        #endif
+    }
+
     func demoHoverState(_ onChange: @escaping (Bool) -> Void) -> some View {
         modifier(DemoHoverStateModifier(onChange: onChange))
     }

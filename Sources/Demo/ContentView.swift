@@ -1,7 +1,7 @@
 import BenchmarkSupport
 import SwiftUI
 
-enum DemoScreen: String, CaseIterable, Identifiable {
+enum DemoScreen: String, CaseIterable, Identifiable, Hashable {
     case situationalAwareness
     case editorialEngine
     case masonry
@@ -12,14 +12,40 @@ enum DemoScreen: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
-    static func launchSelection(arguments: [String] = CommandLine.arguments) -> DemoScreen? {
+    static func availableCases(for platform: DemoNavigationPlatform = .current) -> [DemoScreen] {
+        switch platform {
+        case .ios, .macOS:
+            DemoScreen.allCases
+        case .watchOS:
+            [
+                .situationalAwareness,
+                .editorialEngine,
+                .masonry,
+                .illustratedManuscript,
+                .benchmark,
+            ]
+        }
+    }
+
+    static func defaultSelection(for platform: DemoNavigationPlatform = .current) -> DemoScreen {
+        availableCases(for: platform).first ?? .situationalAwareness
+    }
+
+    static func launchSelection(
+        arguments: [String] = CommandLine.arguments,
+        platform: DemoNavigationPlatform = .current
+    ) -> DemoScreen? {
         guard let flagIndex = arguments.firstIndex(of: "--demo-screen"),
               arguments.indices.contains(arguments.index(after: flagIndex))
         else {
             return nil
         }
 
-        return DemoScreen(rawValue: arguments[arguments.index(after: flagIndex)])
+        guard let selection = DemoScreen(rawValue: arguments[arguments.index(after: flagIndex)]) else {
+            return nil
+        }
+
+        return availableCases(for: platform).contains(selection) ? selection : nil
     }
 
     var title: String {
@@ -80,15 +106,42 @@ enum DemoScreen: String, CaseIterable, Identifiable {
     }
 }
 
-struct ContentView: View {
-    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
-    @State private var selection: DemoScreen = DemoScreen.launchSelection() ?? .situationalAwareness
+private struct WatchUnsupportedDemoView: View {
+    let title: String
 
     var body: some View {
-        switch DemoNavigationStyle.forWidthClass(isCompact: isCompactWidth) {
+        ZStack {
+            Color.black.ignoresSafeArea()
+
+            VStack(spacing: 10) {
+                Image(systemName: "applewatch.slash")
+                    .font(.system(size: 28, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.8))
+
+                Text(title)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .multilineTextAlignment(.center)
+
+                Text("This demo is intentionally excluded from the Apple Watch catalog.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.white.opacity(0.6))
+                    .multilineTextAlignment(.center)
+            }
+            .padding(18)
+        }
+    }
+}
+
+struct ContentView: View {
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @State private var selection: DemoScreen = DemoScreen.launchSelection() ?? DemoScreen.defaultSelection()
+
+    var body: some View {
+        switch DemoNavigationStyle.forWidthClass(isCompact: isCompactWidth, platform: .current) {
         case .tabBar:
             TabView(selection: $selection) {
-                ForEach(DemoScreen.allCases) { screen in
+                ForEach(availableScreens) { screen in
                     demoView(for: screen)
                         .tabItem {
                             Label(screen.compactTitle, systemImage: screen.systemImage)
@@ -98,12 +151,15 @@ struct ContentView: View {
             }
             .ignoresSafeArea()
         case .toolbarPicker:
+            #if os(watchOS)
+            demoView(for: selection)
+            #else
             demoView(for: selection)
                 .ignoresSafeArea()
                 .toolbar {
                     ToolbarItem(placement: .principal) {
                         Picker("Demo", selection: $selection) {
-                            ForEach(DemoScreen.allCases) { screen in
+                            ForEach(availableScreens) { screen in
                                 Text(screen.title).tag(screen)
                             }
                         }
@@ -111,11 +167,30 @@ struct ContentView: View {
                         .frame(maxWidth: 640)
                     }
                 }
+            #endif
+        case .watchList:
+            NavigationStack {
+                List(availableScreens) { screen in
+                    NavigationLink(value: screen) {
+                        Label(screen.title, systemImage: screen.systemImage)
+                    }
+                }
+                .navigationTitle("Pretext")
+                .navigationDestination(for: DemoScreen.self) { screen in
+                    demoView(for: screen)
+                        .ignoresSafeArea()
+                        .navigationTitle(screen.compactTitle)
+                }
+            }
         }
     }
 
     private var isCompactWidth: Bool? {
         horizontalSizeClass.map { $0 == .compact }
+    }
+
+    private var availableScreens: [DemoScreen] {
+        DemoScreen.availableCases(for: .current)
     }
 
     @ViewBuilder
@@ -128,11 +203,19 @@ struct ContentView: View {
         case .masonry:
             MasonryView()
         case .chikaDance:
+            #if os(watchOS)
+            WatchUnsupportedDemoView(title: screen.title)
+            #else
             ChikaDanceView()
+            #endif
         case .illustratedManuscript:
             IllustratedManuscriptView()
         case .liveCameraSilhouette:
+            #if os(watchOS)
+            WatchUnsupportedDemoView(title: screen.title)
+            #else
             CameraSilhouetteView()
+            #endif
         case .benchmark:
             BenchmarkView()
         }

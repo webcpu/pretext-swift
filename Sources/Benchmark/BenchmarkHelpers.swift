@@ -90,10 +90,24 @@ func swiftUIMeasureHeight(text: String, font: Font, width: Double) -> Double {
     hostingView.frame = NSRect(x: 0, y: 0, width: width, height: 10000)
     hostingView.layout()
     return hostingView.fittingSize.height
-    #else
+    #elseif os(iOS)
     let hostingController = UIHostingController(rootView: view)
     let bounds = CGRect(x: 0, y: 0, width: width, height: 10000)
     hostingController.view.bounds = bounds
     return hostingController.sizeThatFits(in: bounds.size).height
+    #else
+    return 0
+    #endif
+}
+
+func measureSwiftUIBenchmark(
+    warmup: Int = 1,
+    iterations: Int = 5,
+    _ body: @MainActor @Sendable () -> Void
+) -> Double? {
+    #if os(watchOS)
+    nil
+    #else
+    measureMedianMainActor(warmup: warmup, iterations: iterations, body)
     #endif
 }

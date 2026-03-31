@@ -1,3 +1,4 @@
+#if !os(watchOS)
 import SwiftUI
 import Pretext
 import PretextUI
@@ -441,3 +442,4 @@ private enum CameraSilhouetteResources {
         return text
     }
 }
+#endif
