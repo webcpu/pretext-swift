@@ -42,6 +42,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.liang.pretextswift.demodevicerunner
         PRODUCT_NAME: Demo
         INFOPLIST_KEY_CFBundleDisplayName: Demo
+        INFOPLIST_KEY_NSCameraUsageDescription: Read your silhouette live so article text can wrap around you.
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: true
         INFOPLIST_KEY_UILaunchScreen_Generation: true
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone:

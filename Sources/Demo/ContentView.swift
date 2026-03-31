@@ -7,6 +7,7 @@ enum DemoScreen: String, CaseIterable, Identifiable {
     case masonry
     case chikaDance
     case illustratedManuscript
+    case liveCameraSilhouette
     case benchmark
 
     var id: String { rawValue }
@@ -33,6 +34,8 @@ enum DemoScreen: String, CaseIterable, Identifiable {
             "Chika Dance"
         case .illustratedManuscript:
             "Illustrated Manuscript"
+        case .liveCameraSilhouette:
+            "Live Camera Silhouette"
         case .benchmark:
             "Benchmark"
         }
@@ -50,6 +53,8 @@ enum DemoScreen: String, CaseIterable, Identifiable {
             "Chika"
         case .illustratedManuscript:
             "Script"
+        case .liveCameraSilhouette:
+            "Camera"
         case .benchmark:
             "Bench"
         }
@@ -67,6 +72,8 @@ enum DemoScreen: String, CaseIterable, Identifiable {
             "play.rectangle"
         case .illustratedManuscript:
             "text.book.closed"
+        case .liveCameraSilhouette:
+            "person.crop.rectangle"
         case .benchmark:
             "speedometer"
         }
@@ -124,6 +131,8 @@ struct ContentView: View {
             ChikaDanceView()
         case .illustratedManuscript:
             IllustratedManuscriptView()
+        case .liveCameraSilhouette:
+            CameraSilhouetteView()
         case .benchmark:
             BenchmarkView()
         }

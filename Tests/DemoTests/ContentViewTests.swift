@@ -14,7 +14,7 @@ final class ContentViewTests: XCTestCase {
         XCTAssertEqual(DemoNavigationStyle.forWidthClass(isCompact: nil, platform: .macOS), .toolbarPicker)
     }
 
-    func testDemoScreenIncludesIllustratedManuscriptOption() {
+    func testDemoScreenIncludesLiveCameraSilhouetteOption() {
         XCTAssertEqual(
             DemoScreen.allCases.map(\.title),
             [
@@ -23,6 +23,7 @@ final class ContentViewTests: XCTestCase {
                 "Masonry",
                 "Chika Dance",
                 "Illustrated Manuscript",
+                "Live Camera Silhouette",
                 "Benchmark",
             ]
         )
