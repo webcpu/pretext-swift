@@ -53,4 +53,60 @@ final class BenchmarkCompactLayoutTests: XCTestCase {
             ["2.4ms", "11.2ms", "4.7x"]
         )
     }
+
+    func testWatchViewProfileUsesCondensedHeaderCopyAndTighterSpacing() {
+        let standardProfile = benchmarkViewProfile(for: .cards)
+        let watchProfile = benchmarkViewProfile(for: .watchCards)
+
+        XCTAssertEqual(standardProfile.suiteLabel, "PRETEXT BENCHMARK SUITE")
+        XCTAssertEqual(standardProfile.headline, "Pretext vs Core Text vs SwiftUI")
+        XCTAssertNil(benchmarkNavigationTitle(platform: .standard))
+
+        XCTAssertEqual(watchProfile.suiteLabel, "")
+        XCTAssertEqual(watchProfile.headline, "Pretext vs CoreText")
+        XCTAssertTrue(watchProfile.showsHeadlineInHeader)
+        XCTAssertTrue(watchProfile.resultsContentFillsHeight)
+        XCTAssertFalse(standardProfile.resultsContentFillsHeight)
+        XCTAssertNil(benchmarkNavigationTitle(platform: .watch))
+        XCTAssertEqual(watchProfile.metricLayoutStyle, .stackedRows)
+        XCTAssertTrue(standardProfile.showsBottomBar)
+        XCTAssertFalse(watchProfile.showsBottomBar)
+        XCTAssertLessThan(watchProfile.headerTopPadding, standardProfile.headerTopPadding)
+        XCTAssertLessThan(watchProfile.headlineFontSize, standardProfile.headlineFontSize)
+        XCTAssertLessThan(watchProfile.headlineHorizontalPadding, standardProfile.headlineHorizontalPadding)
+        XCTAssertLessThan(watchProfile.buttonHorizontalPadding, standardProfile.buttonHorizontalPadding)
+        XCTAssertLessThan(watchProfile.cardPadding, standardProfile.cardPadding)
+        XCTAssertLessThan(watchProfile.bottomBarVerticalPadding, standardProfile.bottomBarVerticalPadding)
+    }
+
+    func testWatchPresentationCondensesLongBenchmarkLabels() {
+        XCTAssertEqual(
+            benchmarkDisplayName("Interleaved Measure-Mutate (500x)", platform: .watch),
+            "Measure-Mutate"
+        )
+        XCTAssertEqual(
+            benchmarkDisplayName("Interleaved Measure-Mutate (500x)", platform: .standard),
+            "Interleaved Measure-Mutate (500x)"
+        )
+        XCTAssertEqual(
+            benchmarkRunStatusLabel("Test 2/5: Reflow at 100 Widths...", platform: .watch),
+            "2/5 Reflow"
+        )
+        XCTAssertEqual(
+            benchmarkRunStatusLabel("Test 2/5: Reflow at 100 Widths...", platform: .standard),
+            "Test 2/5: Reflow at 100 Widths..."
+        )
+        XCTAssertEqual(
+            benchmarkPrimaryActionLabel(hasRunInSession: false, platform: .watch),
+            "Run"
+        )
+        XCTAssertEqual(
+            benchmarkPrimaryActionLabel(hasRunInSession: true, platform: .watch),
+            "Again"
+        )
+        XCTAssertEqual(
+            benchmarkPrimaryActionLabel(hasRunInSession: false, platform: .standard),
+            "Run Benchmarks"
+        )
+    }
 }

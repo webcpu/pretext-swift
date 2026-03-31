@@ -177,9 +177,49 @@ struct ContentView: View {
                 }
                 .navigationTitle("Pretext")
                 .navigationDestination(for: DemoScreen.self) { screen in
-                    demoView(for: screen)
-                        .ignoresSafeArea()
-                        .navigationTitle(screen.compactTitle)
+                    let destinationView = demoView(for: screen)
+
+                    if demoNavigationDestinationUsesSafeArea(platform: .current) {
+                        if demoNavigationDestinationShowsTitle(platform: .current) {
+                            if demoNavigationDestinationFillsContainer(platform: .current) {
+                                destinationView
+                                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                                    .navigationTitle(screen.compactTitle)
+                            } else {
+                                destinationView
+                                    .navigationTitle(screen.compactTitle)
+                            }
+                        } else {
+                            if demoNavigationDestinationFillsContainer(platform: .current) {
+                                destinationView
+                                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                            } else {
+                                destinationView
+                            }
+                        }
+                    } else {
+                        if demoNavigationDestinationShowsTitle(platform: .current) {
+                            if demoNavigationDestinationFillsContainer(platform: .current) {
+                                destinationView
+                                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                                    .ignoresSafeArea()
+                                    .navigationTitle(screen.compactTitle)
+                            } else {
+                                destinationView
+                                    .ignoresSafeArea()
+                                    .navigationTitle(screen.compactTitle)
+                            }
+                        } else {
+                            if demoNavigationDestinationFillsContainer(platform: .current) {
+                                destinationView
+                                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                                    .ignoresSafeArea()
+                            } else {
+                                destinationView
+                                    .ignoresSafeArea()
+                            }
+                        }
+                    }
                 }
             }
         }

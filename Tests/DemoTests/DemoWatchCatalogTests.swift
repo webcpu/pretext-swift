@@ -36,4 +36,22 @@ final class DemoWatchCatalogTests: XCTestCase {
             .benchmark
         )
     }
+
+    func testWatchNavigationDestinationStaysWithinSafeArea() {
+        XCTAssertTrue(demoNavigationDestinationUsesSafeArea(platform: .watchOS))
+        XCTAssertFalse(demoNavigationDestinationUsesSafeArea(platform: .ios))
+        XCTAssertFalse(demoNavigationDestinationUsesSafeArea(platform: .macOS))
+    }
+
+    func testWatchNavigationDestinationHidesDetailTitle() {
+        XCTAssertFalse(demoNavigationDestinationShowsTitle(platform: .watchOS))
+        XCTAssertTrue(demoNavigationDestinationShowsTitle(platform: .ios))
+        XCTAssertTrue(demoNavigationDestinationShowsTitle(platform: .macOS))
+    }
+
+    func testWatchNavigationDestinationFillsDetailContainer() {
+        XCTAssertTrue(demoNavigationDestinationFillsContainer(platform: .watchOS))
+        XCTAssertFalse(demoNavigationDestinationFillsContainer(platform: .ios))
+        XCTAssertFalse(demoNavigationDestinationFillsContainer(platform: .macOS))
+    }
 }

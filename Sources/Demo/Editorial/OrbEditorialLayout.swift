@@ -18,7 +18,7 @@ enum OrbEditorialPresentation: Equatable {
     var bottomChromeHeight: Double {
         switch self {
         case .standard:
-            OrbEditorialMetrics.statsBarHeight
+            OrbEditorialMetrics.standardStatsBarHeight
         case .watch:
             0
         }
@@ -34,7 +34,8 @@ enum OrbEditorialPresentation: Equatable {
 }
 
 enum OrbEditorialMetrics {
-    static let statsBarHeight = 42.0
+    static let standardStatsBarHeight = 42.0
+    static let watchStatsBarHeight = 80.0
     static let minSlotWidth = 50.0
     static let maxContentWidth = 1500.0
     static let circleHorizontalPadding = 14.0
@@ -97,6 +98,10 @@ enum OrbEditorialMetrics {
         }
 
         return pageWidth <= 640 ? compactProfile : regularProfile
+    }
+
+    static func statsBarHeight(for pageWidth: Double) -> Double {
+        pageWidth <= 220 ? watchStatsBarHeight : standardStatsBarHeight
     }
 
     static func bodyFontDescriptor(size: Double) -> FontDescriptor {

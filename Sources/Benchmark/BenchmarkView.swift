@@ -39,27 +39,32 @@ public struct BenchmarkView: View {
     public init() {}
 
     public var body: some View {
-        ZStack {
-            Color(red: 15 / 255, green: 15 / 255, blue: 20 / 255)
-                .ignoresSafeArea()
+        GeometryReader { proxy in
+            ZStack {
+                Color(red: 15 / 255, green: 15 / 255, blue: 20 / 255)
+                    .ignoresSafeArea()
 
-            VStack(spacing: 0) {
-                header
-                    .padding(.top, 50)
-                    .padding(.bottom, 24)
+                VStack(spacing: 0) {
+                    header
+                        .padding(.top, viewProfile.headerTopPadding)
+                        .padding(.bottom, viewProfile.headerBottomPadding)
 
-                if results.isEmpty && state == .idle {
-                    Spacer()
-                    emptyState
-                    Spacer()
-                } else {
-                    resultsContent
+                    if results.isEmpty && state == .idle {
+                        Spacer()
+                        emptyState
+                        Spacer()
+                    } else {
+                        framedResultsContent
+                    }
+
+                    bottomBar
                 }
-
-                bottomBar
+                .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
             }
+            .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
         }
         .preferredColorScheme(.dark)
+        .applyBenchmarkNavigationTitle(benchmarkNavigationTitle(platform: presentationPlatform))
         .onAppear {
             if state == .idle, BenchmarkAutoRunPolicy.shouldAutoRun(isCLI: isCLI) {
                 runAllBenchmarks()
@@ -78,21 +83,49 @@ public struct BenchmarkView: View {
         )
     }
 
+    private var viewProfile: BenchmarkViewProfile {
+        benchmarkViewProfile(for: layoutStyle)
+    }
+
     private var header: some View {
-        VStack(spacing: 12) {
-            Text("PRETEXT BENCHMARK SUITE")
-                .font(.system(size: 14, weight: .semibold, design: .monospaced))
-                .tracking(2)
-                .foregroundStyle(.white.opacity(0.5))
+        Group {
+            if layoutStyle == .watchCards {
+                HStack(spacing: 10) {
+                    runButton
 
-            Text("Pretext vs Core Text vs SwiftUI")
-                .font(.system(size: headlineFontSize, weight: .bold, design: .default))
-                .foregroundStyle(.white)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, layoutStyle == .table ? 0 : 20)
+                    if viewProfile.showsHeadlineInHeader {
+                        Spacer(minLength: 0)
 
-            runButton
+                        Text(viewProfile.headline)
+                            .font(.system(size: viewProfile.headlineFontSize, weight: .medium, design: .default))
+                            .foregroundStyle(.white.opacity(0.58))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+                    }
+                }
+            } else {
+                VStack(alignment: .center, spacing: viewProfile.resultsSpacing) {
+                    if !viewProfile.suiteLabel.isEmpty {
+                        Text(viewProfile.suiteLabel)
+                            .font(.system(size: viewProfile.suiteFontSize, weight: .semibold, design: .monospaced))
+                            .tracking(viewProfile.suiteTracking)
+                            .foregroundStyle(.white.opacity(0.5))
+                    }
+
+                    if viewProfile.showsHeadlineInHeader {
+                        Text(viewProfile.headline)
+                            .font(.system(size: viewProfile.headlineFontSize, weight: .bold, design: .default))
+                            .foregroundStyle(.white)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, viewProfile.headlineHorizontalPadding)
+                    }
+
+                    runButton
+                }
+            }
         }
+        .padding(.horizontal, layoutStyle == .watchCards ? viewProfile.resultsHorizontalPadding : 0)
+        .frame(maxWidth: .infinity, alignment: layoutStyle == .watchCards ? .leading : .center)
     }
 
     private var runButton: some View {
@@ -100,19 +133,26 @@ public struct BenchmarkView: View {
             Group {
                 switch state {
                 case .idle, .done:
-                    Text(BenchmarkAutoRunPolicy.hasRunInSession ? "Run Again" : "Run Benchmarks")
+                    Text(
+                        benchmarkPrimaryActionLabel(
+                            hasRunInSession: BenchmarkAutoRunPolicy.hasRunInSession,
+                            platform: presentationPlatform
+                        )
+                    )
                 case let .running(test):
                     HStack(spacing: 8) {
                         ProgressView()
                             .controlSize(.small)
-                        Text(test)
+                        Text(benchmarkRunStatusLabel(test, platform: presentationPlatform))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
                     }
                 }
             }
-            .font(.system(size: 13, weight: .medium))
+            .font(.system(size: viewProfile.buttonFontSize, weight: .medium))
             .foregroundStyle(.white)
-            .padding(.horizontal, 20)
-            .padding(.vertical, 8)
+            .padding(.horizontal, viewProfile.buttonHorizontalPadding)
+            .padding(.vertical, viewProfile.buttonVerticalPadding)
             .background(.white.opacity(0.1))
             .clipShape(Capsule())
         }
@@ -167,13 +207,13 @@ public struct BenchmarkView: View {
             case .table:
                 VStack(spacing: 0) {
                     resultsTable
-                        .padding(.horizontal, 48)
+                        .padding(.horizontal, viewProfile.resultsHorizontalPadding)
 
                     Spacer(minLength: 16)
                 }
             case .cards:
                 ScrollView {
-                    VStack(spacing: 12) {
+                    VStack(spacing: viewProfile.resultsSpacing) {
                         if results.isEmpty {
                             compactResultsPlaceholder
                         } else {
@@ -182,15 +222,15 @@ public struct BenchmarkView: View {
                             }
                         }
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 16)
+                    .padding(.horizontal, viewProfile.resultsHorizontalPadding)
+                    .padding(.bottom, viewProfile.resultsBottomPadding)
                 }
                 #if !os(watchOS)
                 .scrollBounceBehavior(.basedOnSize)
                 #endif
             case .watchCards:
                 ScrollView {
-                    VStack(spacing: 10) {
+                    VStack(spacing: viewProfile.resultsSpacing) {
                         if results.isEmpty {
                             compactResultsPlaceholder
                         } else {
@@ -199,10 +239,22 @@ public struct BenchmarkView: View {
                             }
                         }
                     }
-                    .padding(.horizontal, 10)
-                    .padding(.bottom, 12)
+                    .padding(.horizontal, viewProfile.resultsHorizontalPadding)
+                    .padding(.bottom, viewProfile.resultsBottomPadding)
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
+        }
+    }
+
+    @ViewBuilder
+    private var framedResultsContent: some View {
+        if viewProfile.resultsContentFillsHeight {
+            resultsContent
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .layoutPriority(1)
+        } else {
+            resultsContent
         }
     }
 
@@ -247,23 +299,41 @@ public struct BenchmarkView: View {
     }
 
     private func compactResultCard(_ result: BenchmarkResult) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text(result.name)
-                .font(.system(size: 14, weight: .semibold))
+        let metrics = compactBenchmarkMetrics(for: result, platform: presentationPlatform)
+
+        return VStack(alignment: .leading, spacing: viewProfile.resultsSpacing) {
+            Text(benchmarkDisplayName(result.name, platform: presentationPlatform))
+                .font(.system(size: viewProfile.cardTitleFontSize, weight: .semibold))
                 .foregroundStyle(.white)
+                .lineLimit(layoutStyle == .watchCards ? 2 : nil)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            LazyVGrid(
-                columns: compactGridColumns,
-                alignment: .leading,
-                spacing: 10
-            ) {
-                ForEach(compactBenchmarkMetrics(for: result, platform: presentationPlatform)) { metric in
-                    compactMetricTile(metric)
+            if viewProfile.metricLayoutStyle == .stackedRows {
+                VStack(spacing: 0) {
+                    ForEach(Array(metrics.enumerated()), id: \.element.id) { index, metric in
+                        compactMetricRow(metric)
+
+                        if index < metrics.count - 1 {
+                            Divider()
+                                .overlay(.white.opacity(0.06))
+                        }
+                    }
+                }
+                .background(.white.opacity(0.04))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+            } else {
+                LazyVGrid(
+                    columns: compactGridColumns,
+                    alignment: .leading,
+                    spacing: 10
+                ) {
+                    ForEach(metrics) { metric in
+                        compactMetricTile(metric)
+                    }
                 }
             }
         }
-        .padding(14)
+        .padding(viewProfile.cardPadding)
         .background(.white.opacity(0.03))
         .clipShape(RoundedRectangle(cornerRadius: 16))
         .overlay(
@@ -280,7 +350,7 @@ public struct BenchmarkView: View {
                 .foregroundStyle(.white.opacity(0.35))
 
             Text(metric.value)
-                .font(.system(size: layoutStyle == .watchCards ? 14 : 16, weight: .semibold, design: .monospaced))
+                .font(.system(size: viewProfile.metricValueFontSize, weight: .semibold, design: .monospaced))
                 .foregroundStyle(metric.tone.color)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
@@ -290,6 +360,25 @@ public struct BenchmarkView: View {
         .padding(.vertical, 10)
         .background(.white.opacity(0.04))
         .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+
+    private func compactMetricRow(_ metric: BenchmarkMetricDisplay) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(metric.label.uppercased())
+                .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                .tracking(0.4)
+                .foregroundStyle(.white.opacity(0.35))
+
+            Spacer(minLength: 8)
+
+            Text(metric.value)
+                .font(.system(size: viewProfile.metricValueFontSize, weight: .semibold, design: .monospaced))
+                .foregroundStyle(metric.tone.color)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
     }
 
     private var compactGridColumns: [GridItem] {
@@ -318,30 +407,23 @@ public struct BenchmarkView: View {
     }
 
     private var bottomBar: some View {
-        HStack {
-            Text(bottomBarText)
-                .font(.system(size: 11))
-                .foregroundStyle(.white.opacity(0.25))
-            Spacer()
-            if !results.isEmpty, layoutStyle != .watchCards {
-                Text("Lower is better (ms)")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.white.opacity(0.25))
+        Group {
+            if viewProfile.showsBottomBar {
+                HStack {
+                    Text(bottomBarText)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.white.opacity(0.25))
+                    Spacer()
+                    if !results.isEmpty, layoutStyle != .watchCards {
+                        Text("Lower is better (ms)")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.white.opacity(0.25))
+                    }
+                }
+                .padding(.horizontal, viewProfile.bottomBarHorizontalPadding)
+                .padding(.vertical, viewProfile.bottomBarVerticalPadding)
+                .background(.black.opacity(0.3))
             }
-        }
-        .padding(.horizontal, 24)
-        .padding(.vertical, 10)
-        .background(.black.opacity(0.3))
-    }
-
-    private var headlineFontSize: CGFloat {
-        switch layoutStyle {
-        case .table:
-            28
-        case .cards:
-            20
-        case .watchCards:
-            17
         }
     }
 
@@ -402,6 +484,24 @@ public struct BenchmarkView: View {
                 state = .done
             }
         }
+    }
+}
+
+private struct BenchmarkNavigationTitleModifier: ViewModifier {
+    let title: String?
+
+    func body(content: Content) -> some View {
+        if let title {
+            content.navigationTitle(title)
+        } else {
+            content
+        }
+    }
+}
+
+private extension View {
+    func applyBenchmarkNavigationTitle(_ title: String?) -> some View {
+        modifier(BenchmarkNavigationTitleModifier(title: title))
     }
 }
 

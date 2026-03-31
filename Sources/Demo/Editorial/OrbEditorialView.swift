@@ -208,30 +208,73 @@ private struct OrbSceneState {
 }
 
 private struct OrbHintPillView: View {
-    private static let font = FontDescriptor(
+    private static let standardFont = FontDescriptor(
         familyName: "Helvetica Neue",
         size: 13,
         weightValue: 0
     )
     .makeDisplayFont()
+    private static let compactFont = FontDescriptor(
+        familyName: "Helvetica Neue",
+        size: 11,
+        weightValue: 0
+    )
+    .makeDisplayFont()
 
     let pauseVerb: String
+    let platform: DemoNavigationPlatform
 
     var body: some View {
-        Text("Drag the orbs · \(pauseVerb) to pause · Text reflows at 60fps · Zero DOM reads")
-            .font(Self.font)
+        Text(orbEditorialHintText(pauseVerb: pauseVerb, platform: platform))
+            .font(platform == .watchOS ? Self.compactFont : Self.standardFont)
             .foregroundStyle(OrbEditorialPalette.hintText)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
+            .padding(.horizontal, platform == .watchOS ? 12 : 16)
+            .padding(.vertical, platform == .watchOS ? 8 : 10)
             .background(OrbEditorialPalette.hintBackground)
             .clipShape(Capsule())
             .allowsHitTesting(false)
     }
 }
 
+func orbEditorialUsesFullBleedPresentation(
+    platform: DemoNavigationPlatform = .current
+) -> Bool {
+    platform != .watchOS
+}
+
+func orbEditorialHintText(
+    pauseVerb: String,
+    platform: DemoNavigationPlatform = .current
+) -> String {
+    switch platform {
+    case .watchOS:
+        "Drag orbs · \(pauseVerb) to pause"
+    case .ios, .macOS:
+        "Drag the orbs · \(pauseVerb) to pause · Text reflows at 60fps · Zero DOM reads"
+    }
+}
+
+func orbEditorialStatsBarUsesGrid(
+    platform: DemoNavigationPlatform = .current
+) -> Bool {
+    platform == .watchOS
+}
+
+func orbEditorialStatLabels(
+    platform: DemoNavigationPlatform = .current
+) -> [String] {
+    switch platform {
+    case .watchOS:
+        ["Lines", "Reflow", "Reads", "FPS", "Cols"]
+    case .ios, .macOS:
+        ["Lines", "Reflow", "Layout reads", "FPS", "Columns"]
+    }
+}
+
 private struct OrbStatItemView: View {
     let label: String
     let value: String
+    let stacked: Bool
 
     private static let labelFont = FontDescriptor(
         familyName: "Helvetica Neue",
@@ -247,35 +290,70 @@ private struct OrbStatItemView: View {
     .makeDisplayFont()
 
     var body: some View {
-        HStack(spacing: 6) {
-            Text(label.uppercased())
-                .font(Self.labelFont)
-                .tracking(0.5)
-                .foregroundStyle(OrbEditorialPalette.statsLabel)
-            Text(value)
-                .font(Self.valueFont)
-                .foregroundStyle(OrbEditorialPalette.statsValue)
+        Group {
+            if stacked {
+                VStack(alignment: .leading, spacing: 2) {
+                    statLabel
+                    statValue
+                }
+            } else {
+                HStack(spacing: 6) {
+                    statLabel
+                    statValue
+                }
+            }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var statLabel: some View {
+        Text(label.uppercased())
+            .font(Self.labelFont)
+            .tracking(0.5)
+            .foregroundStyle(OrbEditorialPalette.statsLabel)
+    }
+
+    private var statValue: some View {
+        Text(value)
+            .font(Self.valueFont)
+            .foregroundStyle(OrbEditorialPalette.statsValue)
     }
 }
 
 private struct OrbStatsBarView: View {
+    private static let watchColumns = Array(
+        repeating: GridItem(.flexible(minimum: 0), spacing: 10, alignment: .leading),
+        count: 3
+    )
+
     let lineCount: Int
     let reflowMilliseconds: Double
     let fps: Int
     let columnCount: Int
+    let platform: DemoNavigationPlatform
+    let height: Double
 
     var body: some View {
-        HStack(spacing: 18) {
-            OrbStatItemView(label: "Lines", value: "\(lineCount)")
-            OrbStatItemView(label: "Reflow", value: String(format: "%.1fms", reflowMilliseconds))
-            OrbStatItemView(label: "Layout reads", value: "0")
-            OrbStatItemView(label: "FPS", value: "\(fps)")
-            OrbStatItemView(label: "Columns", value: "\(columnCount)")
-            Spacer(minLength: 0)
+        Group {
+            if orbEditorialStatsBarUsesGrid(platform: platform) {
+                LazyVGrid(columns: Self.watchColumns, alignment: .leading, spacing: 8) {
+                    ForEach(Array(stats.enumerated()), id: \.offset) { _, stat in
+                        OrbStatItemView(label: stat.label, value: stat.value, stacked: true)
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+            } else {
+                HStack(spacing: 18) {
+                    ForEach(Array(stats.enumerated()), id: \.offset) { _, stat in
+                        OrbStatItemView(label: stat.label, value: stat.value, stacked: false)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 18)
+            }
         }
-        .padding(.horizontal, 18)
-        .frame(height: OrbEditorialMetrics.statsBarHeight)
+        .frame(maxWidth: .infinity, minHeight: height, maxHeight: height, alignment: .leading)
         .background(.ultraThinMaterial)
         .background(OrbEditorialPalette.statsBarBackground)
         .overlay(alignment: .top) {
@@ -283,6 +361,20 @@ private struct OrbStatsBarView: View {
                 .fill(OrbEditorialPalette.statsBorder)
                 .frame(height: 1)
         }
+    }
+
+    private var stats: [(label: String, value: String)] {
+        zip(
+            orbEditorialStatLabels(platform: platform),
+            [
+                "\(lineCount)",
+                String(format: "%.1fms", reflowMilliseconds),
+                "0",
+                "\(fps)",
+                "\(columnCount)"
+            ]
+        )
+        .map { (label: $0.0, value: $0.1) }
     }
 }
 
@@ -315,6 +407,18 @@ struct OrbEditorialView: View {
     @State private var scene = OrbSceneState()
 
     var body: some View {
+        Group {
+            if orbEditorialUsesFullBleedPresentation(platform: .current) {
+                orbitalScene
+                    .ignoresSafeArea()
+            } else {
+                orbitalScene
+            }
+        }
+        .preferredColorScheme(.dark)
+    }
+
+    private var orbitalScene: some View {
         GeometryReader { proxy in
             TimelineView(.animation(paused: false)) { timeline in
                 let now = timeline.date.timeIntervalSinceReferenceDate
@@ -381,8 +485,6 @@ struct OrbEditorialView: View {
                 }
             }
         }
-        .ignoresSafeArea()
-        .preferredColorScheme(.dark)
     }
 
     @ViewBuilder
@@ -409,7 +511,7 @@ struct OrbEditorialView: View {
             }
             .demoPointerCursor(cursor.demoCursor)
 
-            OrbHintPillView(pauseVerb: hintPauseVerb)
+            OrbHintPillView(pauseVerb: hintPauseVerb, platform: .current)
                 .frame(maxWidth: .infinity, alignment: .center)
                 .padding(.top, 40)
                 .zIndex(2)
@@ -420,7 +522,9 @@ struct OrbEditorialView: View {
                     lineCount: snapshot.bodyLines.count,
                     reflowMilliseconds: snapshot.reflowMilliseconds,
                     fps: scene.fpsDisplay,
-                    columnCount: snapshot.columnCount
+                    columnCount: snapshot.columnCount,
+                    platform: .current,
+                    height: OrbEditorialMetrics.statsBarHeight(for: pageSize.width)
                 )
             }
             .zIndex(2)
@@ -465,7 +569,7 @@ struct OrbEditorialView: View {
             )
 
             if showsHint {
-                OrbHintPillView(pauseVerb: hintPauseVerb)
+                OrbHintPillView(pauseVerb: hintPauseVerb, platform: platform)
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.top, 40)
                     .zIndex(2)
@@ -478,7 +582,9 @@ struct OrbEditorialView: View {
                         lineCount: snapshot.bodyLines.count,
                         reflowMilliseconds: snapshot.reflowMilliseconds,
                         fps: scene.fpsDisplay,
-                        columnCount: snapshot.columnCount
+                        columnCount: snapshot.columnCount,
+                        platform: platform,
+                        height: OrbEditorialMetrics.statsBarHeight(for: viewportSize.width)
                     )
                 }
                 .zIndex(2)

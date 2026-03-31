@@ -180,4 +180,30 @@ final class OrbEditorialLayoutTests: XCTestCase {
         XCTAssertLessThan(snapshot.bodyLineHeight, OrbEditorialMetrics.compactProfile.bodyLineHeight)
         XCTAssertLessThan(snapshot.headlineFontSize, Double(OrbEditorialMetrics.compactProfile.headlineMaxSize))
     }
+
+    func testWatchOrbEditorialAvoidsFullBleedAndUsesShortHintCopy() {
+        XCTAssertFalse(orbEditorialUsesFullBleedPresentation(platform: .watchOS))
+        XCTAssertTrue(orbEditorialUsesFullBleedPresentation(platform: .ios))
+        XCTAssertEqual(
+            orbEditorialHintText(pauseVerb: "Tap", platform: .watchOS),
+            "Drag orbs · Tap to pause"
+        )
+        XCTAssertEqual(
+            orbEditorialHintText(pauseVerb: "Click", platform: .macOS),
+            "Drag the orbs · Click to pause · Text reflows at 60fps · Zero DOM reads"
+        )
+    }
+
+    func testWatchOrbEditorialUsesTallerGridStatsBar() {
+        XCTAssertTrue(orbEditorialStatsBarUsesGrid(platform: .watchOS))
+        XCTAssertFalse(orbEditorialStatsBarUsesGrid(platform: .ios))
+        XCTAssertGreaterThan(
+            OrbEditorialMetrics.statsBarHeight(for: 200),
+            OrbEditorialMetrics.statsBarHeight(for: 390)
+        )
+        XCTAssertEqual(
+            orbEditorialStatLabels(platform: .watchOS),
+            ["Lines", "Reflow", "Reads", "FPS", "Cols"]
+        )
+    }
 }

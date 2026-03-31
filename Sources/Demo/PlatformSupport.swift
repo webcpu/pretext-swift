@@ -47,6 +47,24 @@ enum DemoNavigationPlatform: Equatable {
     }
 }
 
+func demoNavigationDestinationUsesSafeArea(
+    platform: DemoNavigationPlatform = .current
+) -> Bool {
+    platform == .watchOS
+}
+
+func demoNavigationDestinationShowsTitle(
+    platform: DemoNavigationPlatform = .current
+) -> Bool {
+    platform != .watchOS
+}
+
+func demoNavigationDestinationFillsContainer(
+    platform: DemoNavigationPlatform = .current
+) -> Bool {
+    platform == .watchOS
+}
+
 enum DemoPointerCursor: Equatable {
     case iBeam
     case pointingHand
