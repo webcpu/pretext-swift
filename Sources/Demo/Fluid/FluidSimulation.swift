@@ -768,7 +768,7 @@ private func fluidResolvePointBoundary(
     let minX = viewport.minX + fluidBoundaryMargin
     let maxX = viewport.maxX - fluidBoundaryMargin
     let minY = viewport.minY + fluidBoundaryMarginTop
-    let maxY = viewport.maxY - fluidBoundaryMargin
+    let maxY = viewport.maxY - fluidBoundaryMarginBottom
 
     if futureCenter.x < minX || futureCenter.x > maxX {
         velocity.x *= -0.5
@@ -794,6 +794,7 @@ private func fluidResolveBoundary(
 
 private let fluidBoundaryMargin = 10.0
 private let fluidBoundaryMarginTop = 52.0
+private let fluidBoundaryMarginBottom = 32.0
 
 private func fluidClampParticleCenter(
     _ particle: inout FluidParticleState,
@@ -802,7 +803,7 @@ private func fluidClampParticleCenter(
     let minX = viewport.minX + fluidBoundaryMargin
     let maxX = viewport.maxX - fluidBoundaryMargin
     let minY = viewport.minY + fluidBoundaryMarginTop
-    let maxY = viewport.maxY - fluidBoundaryMargin
+    let maxY = viewport.maxY - fluidBoundaryMarginBottom
 
     if particle.center.x < minX {
         particle.center.x = minX
@@ -2425,9 +2426,10 @@ private enum FluidMetalShaderSource {
         float height = uniforms.values.z;
         float m = \(fluidBoundaryMargin);
         float mt = \(fluidBoundaryMarginTop);
+        float mb = \(fluidBoundaryMarginBottom);
         float2 next = positions[id] + velocities[id] * dt;
         next.x = clamp(next.x, m, width - m);
-        next.y = clamp(next.y, mt, height - m);
+        next.y = clamp(next.y, mt, height - mb);
         nextPositions[id] = next;
     }
 
@@ -2571,11 +2573,12 @@ private enum FluidMetalShaderSource {
 
         float margin = \(fluidBoundaryMargin);
         float marginTop = \(fluidBoundaryMarginTop);
+        float marginBottom = \(fluidBoundaryMarginBottom);
         float2 futurePosition = position + velocity * dt;
         if (futurePosition.x < margin || futurePosition.x > width - margin) {
             velocity.x *= -0.5;
         }
-        if (futurePosition.y < marginTop || futurePosition.y > height - margin) {
+        if (futurePosition.y < marginTop || futurePosition.y > height - marginBottom) {
             velocity.y *= -0.5;
         }
 

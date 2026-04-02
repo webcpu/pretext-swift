@@ -218,7 +218,8 @@ func evaluateFluidLayout(
     var nextGlyphID = 0
     var glyphs: [FluidGlyphLayout] = []
 
-    while lineTop < metrics.viewportRect.maxY {
+    let layoutBottom = metrics.viewportRect.maxY * 0.7
+    while lineTop < layoutBottom {
         guard let layoutLine = layoutNextLine(
             &prepared,
             start: cursor,
