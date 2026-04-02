@@ -8,6 +8,7 @@ enum DemoScreen: String, CaseIterable, Identifiable, Hashable {
     case chikaDance
     case illustratedManuscript
     case liveCameraSilhouette
+    case fluid
     case benchmark
 
     var id: String { rawValue }
@@ -62,6 +63,8 @@ enum DemoScreen: String, CaseIterable, Identifiable, Hashable {
             "Illustrated Manuscript"
         case .liveCameraSilhouette:
             "Live Camera Silhouette"
+        case .fluid:
+            "Fluid"
         case .benchmark:
             "Benchmark"
         }
@@ -81,6 +84,8 @@ enum DemoScreen: String, CaseIterable, Identifiable, Hashable {
             "Script"
         case .liveCameraSilhouette:
             "Camera"
+        case .fluid:
+            "Fluid"
         case .benchmark:
             "Bench"
         }
@@ -104,6 +109,8 @@ enum DemoScreen: String, CaseIterable, Identifiable, Hashable {
             "text.book.closed"
         case .liveCameraSilhouette:
             "person.crop.rectangle"
+        case .fluid:
+            "drop.fill"
         case .benchmark:
             "speedometer"
         }
@@ -293,6 +300,12 @@ struct ContentView: View {
             WatchUnsupportedDemoView(title: screen.title)
             #else
             CameraSilhouetteView()
+            #endif
+        case .fluid:
+            #if os(watchOS)
+            WatchUnsupportedDemoView(title: screen.title)
+            #else
+            FluidView()
             #endif
         case .benchmark:
             BenchmarkView()

@@ -35,6 +35,12 @@ final class DemoWatchCatalogTests: XCTestCase {
             ),
             .benchmark
         )
+        XCTAssertNil(
+            DemoScreen.launchSelection(
+                arguments: ["Demo", "--demo-screen", DemoScreen.fluid.rawValue],
+                platform: .watchOS
+            )
+        )
     }
 
     func testWatchNavigationDestinationUsesNavigationBarRegion() {

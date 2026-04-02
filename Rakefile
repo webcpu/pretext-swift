@@ -1,9 +1,48 @@
 require "json"
+require "open3"
 require "shellwords"
+require "timeout"
 require "tmpdir"
 
 def latest_path(glob)
   Dir[File.expand_path(glob)].max_by { |path| File.mtime(path) }
+end
+
+def xcode_build_settings(project:, scheme:, configuration:, destination: nil)
+  command = [
+    "xcodebuild",
+    "-project", project,
+    "-scheme", scheme,
+    "-configuration", configuration,
+    "-showBuildSettings",
+  ]
+  command += ["-destination", destination] if destination
+
+  output, status = Open3.capture2e(*command)
+  raise "Unable to resolve build settings for #{scheme}.\n#{output}" unless status.success?
+
+  output.each_line.each_with_object({}) do |line, settings|
+    match = line.match(/^\s*([A-Z0-9_]+)\s=\s(.*)$/)
+    next unless match
+
+    settings[match[1]] = match[2]
+  end
+end
+
+def xcode_built_product_path(project:, scheme:, configuration:, destination: nil)
+  settings = xcode_build_settings(
+    project: project,
+    scheme: scheme,
+    configuration: configuration,
+    destination: destination
+  )
+  target_build_dir = settings["TARGET_BUILD_DIR"]
+  product_name = settings["FULL_PRODUCT_NAME"]
+
+  raise "Unable to locate TARGET_BUILD_DIR for #{scheme}." if target_build_dir.nil? || target_build_dir.empty?
+  raise "Unable to locate FULL_PRODUCT_NAME for #{scheme}." if product_name.nil? || product_name.empty?
+
+  File.join(target_build_dir, product_name)
 end
 
 def devicectl_devices
@@ -186,10 +225,38 @@ desc "Launch the demo app"
 task :demo do
   if RUBY_PLATFORM.include?("darwin")
     Rake::Task[:build_macos_demo].invoke
-    app_path = latest_path("~/Library/Developer/Xcode/DerivedData/DemoMacRunner-*/Build/Products/Release/Demo.app")
-    raise "Built Demo.app not found in DerivedData." unless app_path
+    app_path = xcode_built_product_path(
+      project: "Xcode/DemoMacRunner/DemoMacRunner.xcodeproj",
+      scheme: "DemoMacRunner",
+      configuration: "Release"
+    )
+    raise "Built Demo.app not found at #{app_path}." unless File.exist?(app_path)
 
-    sh "open '#{app_path}'"
+    executable_path = File.join(
+      app_path,
+      "Contents",
+      "MacOS",
+      File.basename(app_path, ".app")
+    )
+    escaped_executable_path = Shellwords.escape(executable_path)
+    escaped_app_path = Shellwords.escape(app_path)
+
+    sh "pkill -TERM -f #{escaped_executable_path} || true"
+
+    begin
+      Timeout.timeout(5) do
+        loop do
+          running = system("pgrep -f #{escaped_executable_path} >/dev/null 2>&1")
+          break unless running
+
+          sleep 0.1
+        end
+      end
+    rescue Timeout::Error
+      raise "Timed out waiting for #{executable_path} to terminate before relaunch."
+    end
+
+    sh "open -n #{escaped_app_path}"
   else
     Rake::Task[:release].invoke
     sh ".build/release/Demo"

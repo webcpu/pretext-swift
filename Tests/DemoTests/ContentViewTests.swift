@@ -49,12 +49,13 @@ final class ContentViewTests: XCTestCase {
                 "Chika",
                 "Script",
                 "Camera",
+                "Fluid",
                 "Bench",
             ]
         )
     }
 
-    func testDemoScreenIncludesLiveCameraSilhouetteOption() {
+    func testDemoScreenIncludesFluidOptionBeforeBenchmark() {
         XCTAssertEqual(
             DemoScreen.allCases.map(\.title),
             [
@@ -64,6 +65,7 @@ final class ContentViewTests: XCTestCase {
                 "Chika Dance",
                 "Illustrated Manuscript",
                 "Live Camera Silhouette",
+                "Fluid",
                 "Benchmark",
             ]
         )
