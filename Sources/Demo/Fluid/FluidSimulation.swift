@@ -8,13 +8,14 @@ let fluidMaximumGlyphDisplacement = 240.0
 
 private enum FluidSimulationConstants {
     static let substepCount = 3
-    static let range = 10.0
+    static let range = 15.0
     static let densityTarget = -1.5
-    static let nearPressureMultiplier = 20.0
+    static let nearPressureMultiplier = 0.0
     static let pressureMultiplier = 15.0
     static let viscosityFactor = 600.1
-    static let dampingFactor = 0.997
-    static let idleDampingFactor = 0.97
+    static let dampingFactor = 0.999
+    static let idleDampingFactor = 0.999
+    static let forceToCenterFactor = 0.0
     static let originalPositionFactor = 0.0
     static let maxVelocity = 1200.0
     static let idleRestReturnFactor = 0.0
@@ -26,8 +27,8 @@ private enum FluidSimulationConstants {
     static let pointerForceMinimum = 0.1
     static let pointerForceMaximum = 1.1
     static let cursorTailMultiplier = 4.0
-    static let collisionPasses = 8
-    static let collisionGap = 1.0
+    static let collisionPasses = 3
+    static let collisionGap = 12.0
     static let collisionPadding = 2.5
     static let collisionVelocityDamping = 1.0
     static let collisionCellSize = 20.0
@@ -415,7 +416,7 @@ private func fluidAdvancePointer(
     ) * 8.0 * dt
 
     // Match web: direction & strength from smoothed position delta
-    let mouseDirection = currentMouse - previousMouse
+    let mouseDirection = previousMouse - currentMouse
     let directionLength = simd_length(mouseDirection)
     let previousStrength = pointer.current?.strength ?? 0
     // Web formula: strength += (velocity * (1-25*dt) - strength) * 8 * dt
@@ -567,6 +568,20 @@ private func fluidAdvanceParticles(
             velocity += springForce * substep
         }
 
+        if FluidSimulationConstants.forceToCenterFactor > 0 {
+            let centerX = viewport.minX + viewport.width * 0.5
+            let centerY = viewport.minY + viewport.height * 0.5
+            let toCenter = SIMD2<Double>(
+                centerX - particle.center.x,
+                centerY - particle.center.y
+            )
+            let dist = simd_length(toCenter)
+            if dist > 1.0 {
+                velocity += (toCenter / dist) *
+                    FluidSimulationConstants.forceToCenterFactor * substep
+            }
+        }
+
         if let pointer {
             velocity += fluidPointerVelocityDelta(
                 particleCenter: particle.center,
@@ -624,8 +639,7 @@ private func fluidPointerVelocityDelta(
         return .zero
     }
 
-    var direction = pointer.direction
-    direction.x *= -1
+    let direction = -pointer.direction
 
     return direction * scaledStrength * FluidSimulationConstants.pointerForceScale * falloff
 }
@@ -751,13 +765,17 @@ private func fluidResolvePointBoundary(
     viewport: WrapRect,
     substep: Double
 ) {
-    let bounceFactor = 40.0 * substep
-    if futureCenter.x < viewport.minX || futureCenter.x > viewport.maxX {
-        velocity.x *= -bounceFactor
+    let minX = viewport.minX + fluidBoundaryMargin
+    let maxX = viewport.maxX - fluidBoundaryMargin
+    let minY = viewport.minY + fluidBoundaryMarginTop
+    let maxY = viewport.maxY - fluidBoundaryMargin
+
+    if futureCenter.x < minX || futureCenter.x > maxX {
+        velocity.x *= -0.5
     }
 
-    if futureCenter.y < viewport.minY || futureCenter.y > viewport.maxY {
-        velocity.y *= -bounceFactor
+    if futureCenter.y < minY || futureCenter.y > maxY {
+        velocity.y *= -0.5
     }
 }
 
@@ -774,12 +792,32 @@ private func fluidResolveBoundary(
     )
 }
 
+private let fluidBoundaryMargin = 10.0
+private let fluidBoundaryMarginTop = 52.0
+
 private func fluidClampParticleCenter(
     _ particle: inout FluidParticleState,
     viewport: WrapRect
 ) {
-    particle.center.x = min(max(particle.center.x, viewport.minX), viewport.maxX)
-    particle.center.y = min(max(particle.center.y, viewport.minY), viewport.maxY)
+    let minX = viewport.minX + fluidBoundaryMargin
+    let maxX = viewport.maxX - fluidBoundaryMargin
+    let minY = viewport.minY + fluidBoundaryMarginTop
+    let maxY = viewport.maxY - fluidBoundaryMargin
+
+    if particle.center.x < minX {
+        particle.center.x = minX
+        if particle.velocity.x < 0 { particle.velocity.x = 0 }
+    } else if particle.center.x > maxX {
+        particle.center.x = maxX
+        if particle.velocity.x > 0 { particle.velocity.x = 0 }
+    }
+    if particle.center.y < minY {
+        particle.center.y = minY
+        if particle.velocity.y < 0 { particle.velocity.y = 0 }
+    } else if particle.center.y > maxY {
+        particle.center.y = maxY
+        if particle.velocity.y > 0 { particle.velocity.y = 0 }
+    }
 }
 
 private func fluidClampParticle(
@@ -1312,7 +1350,7 @@ private func fluidResolveGlyphCollisionsWithMomentum(
     guard particles.count == glyphLayouts.count, !particles.isEmpty else { return }
 
     let collisionCellSize = fluidCollisionCellSize(for: glyphLayouts)
-    let restitution = 0.5
+    let restitution = 1.0
 
     for _ in 0..<FluidSimulationConstants.collisionPasses {
         let grid = FluidSpatialGrid(
@@ -1337,15 +1375,12 @@ private func fluidResolveGlyphCollisionsWithMomentum(
                 let overlapY = min(bounds.maxY, neighborBounds.maxY) - max(bounds.minY, neighborBounds.minY)
                 guard overlapX > 0, overlapY > 0 else { continue }
 
-                // Only respond when particles are moving (skip rest-state text overlaps)
-                let relativeSpeed = simd_length(
-                    particles[index].velocity - particles[neighborIndex].velocity
-                )
                 let maxSpeed = max(
                     simd_length(particles[index].velocity),
                     simd_length(particles[neighborIndex].velocity)
                 )
-                guard maxSpeed > 5.0 else { continue }
+                guard maxSpeed > 2.0 else { continue }
+
                 resolvedAny = true
 
                 let delta = SIMD2<Double>(
@@ -2242,7 +2277,7 @@ private final class FluidMetalSimulationEngine {
                 Float(FluidSimulationConstants.originalPositionFactor)
             ),
             params1: SIMD4<Float>(
-                0,
+                Float(FluidSimulationConstants.forceToCenterFactor),
                 Float(viewport.width),
                 Float(viewport.height),
                 Float(FluidSimulationConstants.maxVelocity)
@@ -2388,9 +2423,11 @@ private enum FluidMetalShaderSource {
         float dt = uniforms.values.x;
         float width = uniforms.values.y;
         float height = uniforms.values.z;
+        float m = \(fluidBoundaryMargin);
+        float mt = \(fluidBoundaryMarginTop);
         float2 next = positions[id] + velocities[id] * dt;
-        next.x = clamp(next.x, 0.0, width);
-        next.y = clamp(next.y, 0.0, height);
+        next.x = clamp(next.x, m, width - m);
+        next.y = clamp(next.y, mt, height - m);
         nextPositions[id] = next;
     }
 
@@ -2489,7 +2526,7 @@ private enum FluidMetalShaderSource {
         float dampingFactor = uniforms.params0.y;
         float viscosityFactor = uniforms.params0.z;
         float toOriginalPositionFactor = uniforms.params0.w;
-        float gravityFactor = uniforms.params1.x;
+        float forceToCenterFactor = uniforms.params1.x;
         float width = uniforms.params1.y;
         float height = uniforms.params1.z;
         float maxVelocity = uniforms.params1.w;
@@ -2516,24 +2553,30 @@ private enum FluidMetalShaderSource {
 
         if (distanceToMouse < mouseStrengthInput * \(FluidSimulationConstants.pointerForceThreshold) && mouseStrengthInput > \(FluidSimulationConstants.pointerActivationThreshold)) {
             float mouseStrength = clamp(mouseStrengthInput * \(FluidSimulationConstants.pointerForceRamp), \(FluidSimulationConstants.pointerForceMinimum), \(FluidSimulationConstants.pointerForceMaximum));
-            float2 direction = mouseDirection;
-            direction.x *= -1.0;
+            float2 direction = -mouseDirection;
             velocity += direction * mouseStrength * \(FluidSimulationConstants.pointerForceScale) * max(mouseStrength * 0.5 - distanceToMouse, 0.0);
         }
 
-        float2 gravity = float2(0.0, -980.0) * gravityFactor;
+        float2 viewportCenter = float2(width * 0.5, height * 0.5);
+        float2 toCenter = viewportCenter - position;
+        float distToCenter = length(toCenter);
+        float2 centerForce = (distToCenter > 1.0)
+            ? normalize(toCenter) * forceToCenterFactor
+            : float2(0.0);
+
         velocity += pressureAcceleration * dt;
         velocity += viscosity[id] * viscosityFactor * dt;
-        velocity += gravity * dt;
+        velocity += centerForce * dt;
         velocity += originDirection * dt;
 
-        float damping = 40.0 * dt;
+        float margin = \(fluidBoundaryMargin);
+        float marginTop = \(fluidBoundaryMarginTop);
         float2 futurePosition = position + velocity * dt;
-        if (futurePosition.x < 0.0 || futurePosition.x > width) {
-            velocity.x *= -damping;
+        if (futurePosition.x < margin || futurePosition.x > width - margin) {
+            velocity.x *= -0.5;
         }
-        if (futurePosition.y < 0.0 || futurePosition.y > height) {
-            velocity.y *= -damping;
+        if (futurePosition.y < marginTop || futurePosition.y > height - margin) {
+            velocity.y *= -0.5;
         }
 
         velocityOut[id] = limit_vector(velocity, maxVelocity);

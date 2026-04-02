@@ -118,7 +118,7 @@ private enum FluidLayoutAssets {
 }
 
 func fluidPhraseCount(for viewportWidth: Double) -> Int {
-    max(1, Int((viewportWidth / 512.0 * 25.0).rounded()))
+    max(1, Int((viewportWidth / 512.0 * 7.0).rounded()))
 }
 
 func fluidPhraseSequence(
