@@ -1789,7 +1789,6 @@ private func fluidZeroParticleVelocitiesIfSettled(
     return zeroedAnyVelocity
 }
 
-#if !os(watchOS)
 final class FluidSimulationDriver {
     private var state = FluidSimulationState.empty
     #if canImport(Metal)
@@ -1912,7 +1911,6 @@ final class FluidSimulationDriver {
     }
     #endif
 }
-#endif
 
 #if canImport(Metal) && !os(watchOS)
 private struct FluidMetalPositionsUniforms {

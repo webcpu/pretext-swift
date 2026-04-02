@@ -1,4 +1,3 @@
-#if !os(watchOS)
 import CoreText
 import SwiftUI
 
@@ -93,9 +92,11 @@ struct FluidView: View {
                 .background(Color.black)
                 .contentShape(Rectangle())
                 .simultaneousGesture(dragGesture)
+                #if !os(watchOS)
                 .demoContinuousHover { location in
                     applyInteraction(.hoverChanged(location))
                 }
+                #endif
                 .task(id: fluidLayoutTaskID(for: proxy.size, platform: .current)) {
                     let snapshot = evaluateFluidLayout(
                         viewportWidth: proxy.size.width,
@@ -402,4 +403,3 @@ private func fluidViewportContains(
         point.y >= viewport.minY &&
         point.y <= viewport.maxY
 }
-#endif
