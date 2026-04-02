@@ -23,6 +23,7 @@ enum DemoScreen: String, CaseIterable, Identifiable, Hashable {
                 .editorialEngine,
                 .masonry,
                 .illustratedManuscript,
+                .fluid,
                 .benchmark,
             ]
         }
@@ -302,11 +303,7 @@ struct ContentView: View {
             CameraSilhouetteView()
             #endif
         case .fluid:
-            #if os(watchOS)
-            WatchUnsupportedDemoView(title: screen.title)
-            #else
             FluidView()
-            #endif
         case .benchmark:
             BenchmarkView()
         }

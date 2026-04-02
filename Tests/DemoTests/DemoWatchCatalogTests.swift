@@ -16,6 +16,7 @@ final class DemoWatchCatalogTests: XCTestCase {
                 "Editorial Engine",
                 "Masonry",
                 "Illustrated Manuscript",
+                "Fluid",
                 "Benchmark",
             ]
         )
@@ -35,11 +36,12 @@ final class DemoWatchCatalogTests: XCTestCase {
             ),
             .benchmark
         )
-        XCTAssertNil(
+        XCTAssertEqual(
             DemoScreen.launchSelection(
                 arguments: ["Demo", "--demo-screen", DemoScreen.fluid.rawValue],
                 platform: .watchOS
-            )
+            ),
+            .fluid
         )
     }
 
