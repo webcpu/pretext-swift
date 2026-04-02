@@ -471,6 +471,10 @@ private func fluidAdvanceParticles(
         return
     }
 
+    let count = particles.count
+    let range = FluidSimulationConstants.range
+    let rangeSq = range * range
+
     let predictedCenters = particles.map { particle in
         WrapPoint(
             x: particle.center.x + particle.velocity.x * substep,
@@ -479,19 +483,31 @@ private func fluidAdvanceParticles(
     }
     let grid = FluidSpatialGrid(
         points: predictedCenters,
-        cellSize: FluidSimulationConstants.range
+        cellSize: range
     )
 
-    var densities = Array(repeating: 0.0, count: particles.count)
-    var nearDensities = Array(repeating: 0.0, count: particles.count)
-    var viscosityForces = Array(repeating: SIMD2<Double>.zero, count: particles.count)
-    var pressureForces = Array(repeating: SIMD2<Double>.zero, count: particles.count)
+    var densities = Array(repeating: 0.0, count: count)
+    var nearDensities = Array(repeating: 0.0, count: count)
+    var viscosityForces = Array(repeating: SIMD2<Double>.zero, count: count)
+    var pressureForces = Array(repeating: SIMD2<Double>.zero, count: count)
 
+    // Cache neighbor pairs from pass 1 to reuse in pass 2
+    // (eliminates second grid query + second sqrt computation)
+    var cachedNeighborIndices = [Int32]()
+    var cachedDistances = [Double]()
+    var cachedDirections = [SIMD2<Double>]()
+    var cachedStarts = Array(repeating: Int32(0), count: count + 1)
+    cachedNeighborIndices.reserveCapacity(count * 8)
+    cachedDistances.reserveCapacity(count * 8)
+    cachedDirections.reserveCapacity(count * 8)
+
+    // Pass 1: Density + viscosity + cache neighbor info
     for index in particles.indices {
         let point = predictedCenters[index]
         var density = 0.0
         var nearDensity = 0.0
         var viscosity = SIMD2<Double>.zero
+        cachedStarts[index] = Int32(cachedNeighborIndices.count)
 
         for neighborIndex in grid.neighbors(around: point) where neighborIndex != index {
             let neighborPoint = predictedCenters[neighborIndex]
@@ -499,41 +515,45 @@ private func fluidAdvanceParticles(
                 neighborPoint.x - point.x,
                 neighborPoint.y - point.y
             )
-            let distance = simd_length(delta)
-            guard distance < FluidSimulationConstants.range else {
+            // Distance-squared early exit: avoids sqrt for out-of-range particles
+            let distSq = simd_length_squared(delta)
+            guard distSq < rangeSq else {
                 continue
             }
+            let distance = sqrt(distSq)
 
             density += fluidDensityKernel(distance: distance)
             nearDensity += fluidNearDensityKernel(distance: distance)
             viscosity += (particles[neighborIndex].velocity - particles[index].velocity) *
                 fluidViscosityKernel(distance: distance)
+
+            // Cache for pass 2
+            if distance > 0.0001 {
+                cachedNeighborIndices.append(Int32(neighborIndex))
+                cachedDistances.append(distance)
+                cachedDirections.append(delta / distance)
+            }
         }
 
         densities[index] = max(0, density) + 1e-6
         nearDensities[index] = nearDensity + 1e-6
         viscosityForces[index] = viscosity
     }
+    cachedStarts[count] = Int32(cachedNeighborIndices.count)
 
     let pressures = densities.map { fluidPressureForDensity($0) }
     let nearPressures = nearDensities.map { fluidNearPressureForDensity($0) }
 
+    // Pass 2: Pressure forces using cached neighbors (no grid query, no sqrt)
     for index in particles.indices {
-        let point = predictedCenters[index]
+        let start = Int(cachedStarts[index])
+        let end = Int(cachedStarts[index + 1])
         var force = SIMD2<Double>.zero
 
-        for neighborIndex in grid.neighbors(around: point) where neighborIndex != index {
-            let neighborPoint = predictedCenters[neighborIndex]
-            let delta = SIMD2<Double>(
-                neighborPoint.x - point.x,
-                neighborPoint.y - point.y
-            )
-            let distance = simd_length(delta)
-            guard distance > 0.0001, distance < FluidSimulationConstants.range else {
-                continue
-            }
-
-            let direction = delta / distance
+        for i in start..<end {
+            let neighborIndex = Int(cachedNeighborIndices[i])
+            let distance = cachedDistances[i]
+            let direction = cachedDirections[i]
             let sharedPressure = (pressures[index] + pressures[neighborIndex]) * 0.5
             let sharedNearPressure = (nearPressures[index] + nearPressures[neighborIndex]) * 0.5
             force += direction *

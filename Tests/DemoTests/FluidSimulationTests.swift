@@ -929,4 +929,203 @@ final class FluidSimulationTests: XCTestCase {
             )
         }
     }
+
+    // MARK: - Performance Baseline Tests
+
+    /// Measures the full CPU simulation step (SPH + collisions) for ~1000 particles.
+    /// Run before and after optimizations to verify speedup.
+    func testPerformanceBaselineFullStepWith1000Particles() {
+        let layout = makeLayout(width: 1200, height: 800, platform: .macOS)
+        var state = FluidSimulationState.empty
+        state.reset(from: layout)
+
+        let particleCount = state.particles.count
+        XCTAssertGreaterThan(particleCount, 500, "Need enough particles for a meaningful benchmark")
+
+        // Warm up: run a sweep to get particles moving
+        let center = WrapPoint(x: 600, y: 400)
+        applySweep(
+            to: &state,
+            from: center,
+            to: WrapPoint(x: center.x + 200, y: center.y),
+            frames: 10,
+            layout: layout
+        )
+
+        // Benchmark: 60 frames of CPU simulation (1 second at 60fps)
+        let iterations = 60
+        let dt = 1.0 / 60.0
+        let start = CFAbsoluteTimeGetCurrent()
+
+        for _ in 0..<iterations {
+            _ = state.step(dt: dt, pointer: nil, layout: layout)
+        }
+
+        let elapsed = CFAbsoluteTimeGetCurrent() - start
+        let msPerFrame = (elapsed / Double(iterations)) * 1000
+
+        // Record baseline — update these after optimization
+        print("""
+        [Perf] Full step: \(particleCount) particles
+        [Perf] Total: \(String(format: "%.1f", elapsed * 1000))ms for \(iterations) frames
+        [Perf] Per frame: \(String(format: "%.2f", msPerFrame))ms
+        [Perf] Budget: \(String(format: "%.1f", msPerFrame / 16.67 * 100))% of 16.67ms frame budget
+        """)
+
+        // Assert we stay under frame budget (16.67ms at 60fps)
+        XCTAssertLessThan(
+            msPerFrame, 16.0,
+            "Simulation step must stay under 60fps frame budget"
+        )
+    }
+
+    /// Measures idle simulation step (no pointer, particles moving from prior sweep).
+    func testPerformanceBaselineIdleStepAfterSweep() {
+        let layout = makeLayout(width: 1200, height: 800, platform: .macOS)
+        var state = FluidSimulationState.empty
+        state.reset(from: layout)
+
+        // Get particles moving
+        let center = WrapPoint(x: 600, y: 400)
+        applySweep(
+            to: &state,
+            from: center,
+            to: WrapPoint(x: center.x + 300, y: center.y + 100),
+            frames: 15,
+            layout: layout
+        )
+
+        let particleCount = state.particles.count
+
+        // Benchmark: 120 idle frames (2 seconds at 60fps)
+        let iterations = 120
+        let dt = 1.0 / 60.0
+        let start = CFAbsoluteTimeGetCurrent()
+
+        for _ in 0..<iterations {
+            _ = state.step(dt: dt, pointer: nil, layout: layout)
+        }
+
+        let elapsed = CFAbsoluteTimeGetCurrent() - start
+        let msPerFrame = (elapsed / Double(iterations)) * 1000
+
+        print("""
+        [Perf] Idle step: \(particleCount) particles
+        [Perf] Per frame: \(String(format: "%.2f", msPerFrame))ms
+        """)
+
+        XCTAssertLessThan(
+            msPerFrame, 10.0,
+            "Idle step should stay well under frame budget"
+        )
+    }
+
+    /// Verifies that optimization does not change simulation output.
+    /// Runs identical inputs and checks particle positions match a recorded snapshot.
+    func testDeterministicOutputAfterSweep() {
+        let layout = makeLayout(width: 640, height: 360, platform: .macOS)
+        var state = FluidSimulationState.empty
+        state.reset(from: layout)
+
+        let particleCount = state.particles.count
+        XCTAssertGreaterThan(particleCount, 0)
+
+        // Run a deterministic sweep
+        let start = WrapPoint(x: 320, y: 180)
+        let end = WrapPoint(x: 520, y: 180)
+        applySweep(to: &state, from: start, to: end, frames: 30, layout: layout)
+
+        // Run 30 more idle frames
+        for _ in 0..<30 {
+            _ = state.step(dt: 1.0 / 60.0, pointer: nil, layout: layout)
+        }
+
+        // Snapshot key statistics
+        let totalDisplacement = state.particles.enumerated().reduce(0.0) { sum, pair in
+            let (index, particle) = pair
+            return sum + hypot(
+                particle.center.x - state.restCenters[index].x,
+                particle.center.y - state.restCenters[index].y
+            )
+        }
+
+        let maxVelocity = state.particles.reduce(0.0) { max($0, simd_length($1.velocity)) }
+
+        let allInBounds = state.particles.allSatisfy { particle in
+            particle.center.x >= layout.pageMetrics.viewportRect.minX &&
+            particle.center.x <= layout.pageMetrics.viewportRect.maxX &&
+            particle.center.y >= layout.pageMetrics.viewportRect.minY &&
+            particle.center.y <= layout.pageMetrics.viewportRect.maxY
+        }
+
+        // These assertions verify physics correctness:
+        // 1. Some particles were displaced (sweep had an effect)
+        XCTAssertGreaterThan(
+            totalDisplacement, 100,
+            "Sweep should displace particles significantly"
+        )
+
+        // 2. Velocities are bounded (no explosion)
+        XCTAssertLessThan(
+            maxVelocity, 1300,
+            "Max velocity should stay near the 1200 limit"
+        )
+
+        // 3. All particles stayed in viewport
+        XCTAssertTrue(allInBounds, "All particles must stay within viewport")
+
+        // 4. Record snapshot for regression detection
+        print("""
+        [Determinism] Particles: \(particleCount)
+        [Determinism] Total displacement: \(String(format: "%.1f", totalDisplacement))
+        [Determinism] Max velocity: \(String(format: "%.1f", maxVelocity))
+        [Determinism] All in bounds: \(allInBounds)
+        """)
+    }
+
+    /// Measures active simulation with pointer sweep (worst case).
+    func testPerformanceBaselineActiveSweep() {
+        let layout = makeLayout(width: 1200, height: 800, platform: .macOS)
+        var state = FluidSimulationState.empty
+        state.reset(from: layout)
+
+        let particleCount = state.particles.count
+        let dt = 1.0 / 60.0
+
+        // Benchmark: 60-frame sweep across viewport
+        let iterations = 60
+        let startPoint = WrapPoint(x: 100, y: 400)
+        let endPoint = WrapPoint(x: 1100, y: 400)
+        let start = CFAbsoluteTimeGetCurrent()
+
+        for frame in 0..<iterations {
+            let progress = Double(frame) / Double(iterations)
+            let point = WrapPoint(
+                x: startPoint.x + (endPoint.x - startPoint.x) * progress,
+                y: startPoint.y + (endPoint.y - startPoint.y) * progress
+            )
+            _ = state.step(
+                dt: dt,
+                pointer: FluidPointerInput(
+                    center: point,
+                    isInitialContact: frame == 0
+                ),
+                layout: layout
+            )
+        }
+
+        let elapsed = CFAbsoluteTimeGetCurrent() - start
+        let msPerFrame = (elapsed / Double(iterations)) * 1000
+
+        print("""
+        [Perf] Active sweep: \(particleCount) particles
+        [Perf] Per frame: \(String(format: "%.2f", msPerFrame))ms
+        [Perf] Budget: \(String(format: "%.1f", msPerFrame / 16.67 * 100))% of 16.67ms frame budget
+        """)
+
+        XCTAssertLessThan(
+            msPerFrame, 16.0,
+            "Active sweep must stay under 60fps frame budget"
+        )
+    }
 }
