@@ -65,8 +65,10 @@ struct FluidLayoutSnapshot: Equatable {
 private enum FluidLayoutDefaults {
     static let desktopFontSize = 16.0
     static let mobileFontSize = 12.0
+    static let watchFontSize = 10.0
     static let desktopCursorBaseSize = 22.0
     static let mobileCursorBaseSize = 18.0
+    static let watchCursorBaseSize = 14.0
 }
 
 private struct FluidPreparedCacheKey: Hashable {
@@ -117,8 +119,12 @@ private enum FluidLayoutAssets {
     }
 }
 
-func fluidPhraseCount(for viewportWidth: Double) -> Int {
-    max(1, Int((viewportWidth / 512.0 * 7.0).rounded()))
+func fluidPhraseCount(
+    for viewportWidth: Double,
+    platform: DemoNavigationPlatform = .current
+) -> Int {
+    let multiplier: Double = platform == .watchOS ? 3.0 : 7.0
+    return max(1, Int((viewportWidth / 512.0 * multiplier).rounded()))
 }
 
 func fluidPhraseSequence(
@@ -164,9 +170,31 @@ func fluidPageMetrics(
 ) -> FluidPageMetrics {
     let width = max(0, viewportWidth)
     let height = max(0, viewportHeight)
-    let usesDesktopSizing = platform == .macOS
     let viewportRect = WrapRect(x: 0, y: 0, width: width, height: height)
-    let fontSize = usesDesktopSizing ? FluidLayoutDefaults.desktopFontSize : FluidLayoutDefaults.mobileFontSize
+
+    let fontSize: Double
+    let cursorBaseSize: Double
+    let columnDivisor: Double
+    let rowDivisor: Double
+
+    switch platform {
+    case .watchOS:
+        fontSize = FluidLayoutDefaults.watchFontSize
+        cursorBaseSize = FluidLayoutDefaults.watchCursorBaseSize
+        columnDivisor = 16
+        rowDivisor = 18
+    case .macOS:
+        fontSize = FluidLayoutDefaults.desktopFontSize
+        cursorBaseSize = FluidLayoutDefaults.desktopCursorBaseSize
+        columnDivisor = 28
+        rowDivisor = 28
+    case .ios:
+        fontSize = FluidLayoutDefaults.mobileFontSize
+        cursorBaseSize = FluidLayoutDefaults.mobileCursorBaseSize
+        columnDivisor = 22
+        rowDivisor = 24
+    }
+
     let font = fluidBodyFont(size: fontSize)
     let lineHeight = Double(CTFontGetAscent(font) + CTFontGetDescent(font) + CTFontGetLeading(font))
 
@@ -176,9 +204,9 @@ func fluidPageMetrics(
         layoutWidth: width,
         fontSize: fontSize,
         lineHeight: lineHeight,
-        fieldColumns: max(18, Int(width / (usesDesktopSizing ? 28 : 22))),
-        fieldRows: max(12, Int(height / (usesDesktopSizing ? 28 : 24))),
-        cursorBaseSize: usesDesktopSizing ? FluidLayoutDefaults.desktopCursorBaseSize : FluidLayoutDefaults.mobileCursorBaseSize
+        fieldColumns: max(18, Int(width / columnDivisor)),
+        fieldRows: max(12, Int(height / rowDivisor)),
+        cursorBaseSize: cursorBaseSize
     )
 }
 
@@ -201,7 +229,7 @@ func evaluateFluidLayout(
         )
     }
 
-    let phraseCount = fluidPhraseCount(for: viewportWidth)
+    let phraseCount = fluidPhraseCount(for: viewportWidth, platform: platform)
     let text = fluidDisplayText(phraseCount: phraseCount)
     let font = fluidBodyFont(size: metrics.fontSize)
     let ascent = Double(CTFontGetAscent(font))

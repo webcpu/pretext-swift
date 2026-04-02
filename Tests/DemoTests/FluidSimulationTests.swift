@@ -692,6 +692,16 @@ final class FluidSimulationTests: XCTestCase {
         XCTAssertLessThan(state.particles[0].velocity.x, 100)
     }
 
+    func testWatchLayoutUsesReducedMetrics() {
+        let layout = makeLayout(width: 198, height: 242, platform: .watchOS)
+
+        XCTAssertEqual(layout.pageMetrics.fontSize, 10.0)
+        XCTAssertEqual(layout.pageMetrics.cursorBaseSize, 14.0)
+        XCTAssertGreaterThan(layout.glyphs.count, 0)
+        XCTAssertLessThan(layout.glyphs.count, 300,
+            "Watch should have fewer characters than mobile")
+    }
+
     func testRestLayoutDensityScaleStaysNearNativePressureBalancePoint() {
         let layout = makeLayout(width: 1100, height: 700, platform: .macOS)
         let range = 15.0
