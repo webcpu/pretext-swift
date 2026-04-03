@@ -22,6 +22,107 @@ final class CoreEngineTests: XCTestCase {
         return layoutWithLines(prepared, maxWidth: width, lineHeight: lineHeight)
     }
 
+    private func collectStreamedLines(
+        _ prepared: PreparedText,
+        width: Double,
+        start: LayoutCursor = .start
+    ) -> [LayoutLine] {
+        var lines: [LayoutLine] = []
+        var cursor = start
+        var iterPrepared = prepared
+
+        while let line = layoutNextLine(&iterPrepared, start: cursor, maxWidth: width) {
+            lines.append(line)
+            cursor = line.end
+        }
+
+        return lines
+    }
+
+    private func collectStreamedLines(
+        _ prepared: PreparedText,
+        widths: [Double],
+        start: LayoutCursor = .start
+    ) -> [LayoutLine] {
+        var lines: [LayoutLine] = []
+        var cursor = start
+        var iterPrepared = prepared
+        var widthIndex = 0
+
+        while true {
+            guard widthIndex < widths.count else {
+                XCTFail("collectStreamedLines(widths:) requires enough widths to finish the paragraph")
+                return lines
+            }
+
+            guard let line = layoutNextLine(&iterPrepared, start: cursor, maxWidth: widths[widthIndex]) else {
+                return lines
+            }
+            lines.append(line)
+            cursor = line.end
+            widthIndex += 1
+        }
+    }
+
+    private func compareCursors(_ lhs: LayoutCursor, _ rhs: LayoutCursor) -> Int {
+        if lhs.segmentIndex != rhs.segmentIndex {
+            return lhs.segmentIndex - rhs.segmentIndex
+        }
+        return lhs.graphemeIndex - rhs.graphemeIndex
+    }
+
+    private func terminalCursor(_ prepared: PreparedText) -> LayoutCursor {
+        LayoutCursor(segmentIndex: prepared.segments.count, graphemeIndex: 0)
+    }
+
+    private func segmentGraphemes(_ prepared: PreparedText, segmentIndex: Int) -> [String] {
+        prepared.layoutSegments[segmentIndex].graphemeStrings
+    }
+
+    private func reconstructFromLineBoundaries(_ prepared: PreparedText, lines: [LayoutLine]) -> String {
+        var text = ""
+
+        for line in lines {
+            var segmentIndex = line.start.segmentIndex
+
+            while segmentIndex < line.end.segmentIndex {
+                let segment = prepared.layoutSegments[segmentIndex]
+                let startGraphemeIndex = segmentIndex == line.start.segmentIndex ? line.start.graphemeIndex : 0
+                let graphemes = segmentGraphemes(prepared, segmentIndex: segmentIndex)
+
+                if startGraphemeIndex == 0 {
+                    text += segment
+                } else {
+                    text += graphemes[startGraphemeIndex...].joined()
+                }
+
+                segmentIndex += 1
+            }
+
+            if line.end.graphemeIndex > 0, line.end.segmentIndex < prepared.layoutSegments.count {
+                let graphemes = segmentGraphemes(prepared, segmentIndex: line.end.segmentIndex)
+                text += graphemes[..<line.end.graphemeIndex].joined()
+            }
+        }
+
+        return text
+    }
+
+    private func assertLinesEqual(
+        _ lhs: [LayoutLine],
+        _ rhs: [LayoutLine],
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        XCTAssertEqual(lhs.map(\.text), rhs.map(\.text), file: file, line: line)
+        XCTAssertEqual(lhs.map(\.start), rhs.map(\.start), file: file, line: line)
+        XCTAssertEqual(lhs.map(\.end), rhs.map(\.end), file: file, line: line)
+        XCTAssertEqual(lhs.count, rhs.count, file: file, line: line)
+        for (left, right) in zip(lhs, rhs) {
+            XCTAssertEqual(left.width, right.width, accuracy: 0.001, file: file, line: line)
+        }
+    }
+
     func testWhitespaceOnlyInputStaysEmpty() {
         let prepared = prepare("  \t\n  ", font: font)
 
@@ -200,6 +301,12 @@ final class CoreEngineTests: XCTestCase {
         for (walked, line) in zip(walkedRanges, lines) {
             XCTAssertEqual(walked.width, line.width, accuracy: 0.001)
         }
+    }
+
+    func testMeasureNaturalWidthReturnsWidestForcedLine() {
+        let prepared = prepareWithSegments("alpha\nbeta gamma", font: font, whiteSpace: .preWrap)
+
+        XCTAssertEqual(measureNaturalWidth(prepared), max(measure("alpha"), measure("beta gamma")), accuracy: 0.001)
     }
 
     func testOverlongBreakableSegmentsWrapOntoFreshLine() {
@@ -553,6 +660,106 @@ final class CoreEngineTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(result.lineCount, 1)
         XCTAssertEqual(result.height, Double(result.lineCount) * lineHeight)
         XCTAssertEqual(lines.map(\.text).joined(), text)
+    }
+
+    func testMixedScriptCanaryKeepsLayoutWithLinesAndLayoutNextLineAligned() {
+        let prepared = prepareWithSegments("Hello 世界 مرحبا 🌍 test", font: font)
+        let width = 80.0
+        let (_, expectedLines) = layoutWithLines(prepared, maxWidth: width, lineHeight: lineHeight)
+
+        XCTAssertGreaterThan(expectedLines.count, 1)
+        assertLinesEqual(collectStreamedLines(prepared, width: width), expectedLines)
+    }
+
+    func testLayoutAndLayoutWithLinesStayAlignedWhenZWSPTriggersNarrowBreaking() {
+        let cases = [
+            "alpha\u{200B}beta",
+            "alpha\u{200B}beta\u{200C}gamma",
+        ]
+
+        for text in cases {
+            let plain = prepare(text, font: font)
+            let rich = prepareWithSegments(text, font: font)
+            let width = 10.0
+
+            XCTAssertEqual(
+                layout(plain, maxWidth: width, lineHeight: lineHeight).lineCount,
+                layoutWithLines(rich, maxWidth: width, lineHeight: lineHeight).0.lineCount
+            )
+        }
+    }
+
+    func testLayoutWithLinesStripsLeadingCollapsibleSpaceAfterZWSPBreakTheSameWayAsLayoutNextLine() {
+        let prepared = prepareWithSegments("生活就像海洋\u{200B} 只有意志坚定的人才能到达彼岸", font: font)
+        let width = prepared.widths[0] - 1
+
+        assertLinesEqual(
+            layoutWithLines(prepared, maxWidth: width, lineHeight: lineHeight).1,
+            collectStreamedLines(prepared, width: width)
+        )
+    }
+
+    func testLayoutNextLineCanResumeFromAnyFixedWidthLineStartWithoutHiddenState() {
+        let prepared = prepareWithSegments("Hello 世界 مرحبا 🌍 test again", font: font)
+        let width = 80.0
+        let (_, expectedLines) = layoutWithLines(prepared, maxWidth: width, lineHeight: lineHeight)
+
+        XCTAssertGreaterThan(expectedLines.count, 2)
+        assertLinesEqual(collectStreamedLines(prepared, width: width), expectedLines)
+
+        for index in expectedLines.indices {
+            assertLinesEqual(
+                collectStreamedLines(prepared, width: width, start: expectedLines[index].start),
+                Array(expectedLines[index...])
+            )
+        }
+
+        XCTAssertNil(layoutNextLine(prepared, start: terminalCursor(prepared), maxWidth: width))
+    }
+
+    func testLayoutNextLineVariableWidthStreamingStaysContiguousAndReconstructsNormalizedText() {
+        let prepared = prepareWithSegments(
+            "foo trans\u{00AD}atlantic said \"hello\" to 世界 and waved. According to محمد الأحمد, alpha\u{200B}beta 🚀",
+            font: font
+        )
+        let widths = [140.0, 72.0, 108.0, 64.0, 160.0, 84.0, 116.0, 70.0, 180.0, 92.0, 128.0, 76.0]
+        let lines = collectStreamedLines(prepared, widths: widths)
+        let expected = prepared.layoutSegments.joined()
+
+        XCTAssertGreaterThan(lines.count, 2)
+        XCTAssertEqual(lines.first?.start, .start)
+
+        for index in lines.indices {
+            XCTAssertGreaterThan(compareCursors(lines[index].end, lines[index].start), 0)
+            if index > 0 {
+                XCTAssertEqual(lines[index].start, lines[index - 1].end)
+            }
+        }
+
+        XCTAssertEqual(lines.last?.end, terminalCursor(prepared))
+        XCTAssertEqual(reconstructFromLineBoundaries(prepared, lines: lines), expected)
+        XCTAssertNil(layoutNextLine(prepared, start: terminalCursor(prepared), maxWidth: widths.last!))
+    }
+
+    func testLayoutNextLineVariableWidthStreamingStaysContiguousInPreWrapMode() {
+        let prepared = prepareWithSegments("foo\n  bar baz\n\tquux quuz", font: font, whiteSpace: .preWrap)
+        let widths = [200.0, 62.0, 80.0, 200.0, 72.0, 200.0]
+        let lines = collectStreamedLines(prepared, widths: widths)
+        let expected = prepared.layoutSegments.joined()
+
+        XCTAssertGreaterThanOrEqual(lines.count, 4)
+        XCTAssertEqual(lines.first?.start, .start)
+
+        for index in lines.indices {
+            XCTAssertGreaterThan(compareCursors(lines[index].end, lines[index].start), 0)
+            if index > 0 {
+                XCTAssertEqual(lines[index].start, lines[index - 1].end)
+            }
+        }
+
+        XCTAssertEqual(lines.last?.end, terminalCursor(prepared))
+        XCTAssertEqual(reconstructFromLineBoundaries(prepared, lines: lines), expected)
+        XCTAssertNil(layoutNextLine(prepared, start: terminalCursor(prepared), maxWidth: widths.last!))
     }
 
     func testPreWrapHangingSpaces() {

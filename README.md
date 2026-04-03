@@ -63,6 +63,7 @@ The demo app includes:
 1. `prepare(text, font)` segments text, measures runs with Core Text, and caches widths.
 2. `layout(prepared, maxWidth, lineHeight)` computes multiline layout from cached widths.
 3. `layoutNextLine(prepared, cursor, maxWidth)` supports line-by-line flow for variable-width layouts.
+4. `measureNaturalWidth(prepared)` returns the widest forced line for rich/manual layout work.
 
 The key idea is separating measurement from layout so animated obstacle reflow can stay cheap.
 

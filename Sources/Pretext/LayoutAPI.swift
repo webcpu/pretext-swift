@@ -439,6 +439,16 @@ public func walkLineRanges(
     walkLineRanges(&prepared, maxWidth: maxWidth, onLine: onLine)
 }
 
+public func measureNaturalWidth(_ prepared: PreparedText) -> Double {
+    var maxLineWidth = 0.0
+
+    walkLineRanges(prepared, maxWidth: .infinity) { lineWidth, _, _ in
+        maxLineWidth = max(maxLineWidth, lineWidth)
+    }
+
+    return maxLineWidth
+}
+
 public func layoutNextLine(_ prepared: inout PreparedText, start: LayoutCursor, maxWidth: Double) -> LayoutLine? {
     prepareForWidth(&prepared, maxWidth: maxWidth)
     guard let range = layoutNextLineRange(prepared, start: start, maxWidth: maxWidth) else {

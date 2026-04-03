@@ -13,6 +13,20 @@ private func isSimpleCollapsibleSpace(_ kind: SegmentBreakKind) -> Bool {
     kind == .space
 }
 
+private func normalizeSimpleLineStartSegmentIndex(_ prepared: PreparedText, segmentIndex: Int) -> Int {
+    var segmentIndex = segmentIndex
+
+    while segmentIndex < prepared.widths.count {
+        let kind = prepared.layoutKinds[segmentIndex]
+        if kind != .space, kind != .zeroWidthBreak, kind != .softHyphen {
+            break
+        }
+        segmentIndex += 1
+    }
+
+    return segmentIndex
+}
+
 private func shouldKeepWholeFreshLineTextSegment(
     kinds: [SegmentBreakKind],
     segmentIndex: Int,
@@ -80,16 +94,28 @@ private func fitSoftHyphenBreak(
     return (fitCount, fittedWidth)
 }
 
-private func findChunkIndexForStart(_ prepared: PreparedText, segmentIndex: Int) -> Int? {
-    for (index, chunk) in prepared.chunks.enumerated() {
-        if segmentIndex < chunk.consumedEndSegmentIndex {
-            return index
-        }
-    }
-    return nil
+private struct NormalizedLineStart {
+    var cursor: LayoutCursor
+    var chunkIndex: Int
 }
 
-public func normalizeLineStart(_ prepared: PreparedText, start: LayoutCursor) -> LayoutCursor? {
+private func findChunkIndexForStart(_ prepared: PreparedText, segmentIndex: Int) -> Int? {
+    var low = 0
+    var high = prepared.chunks.count
+
+    while low < high {
+        let mid = (low + high) / 2
+        if segmentIndex < prepared.chunks[mid].consumedEndSegmentIndex {
+            high = mid
+        } else {
+            low = mid + 1
+        }
+    }
+
+    return low < prepared.chunks.count ? low : nil
+}
+
+private func normalizeLineStartWithChunk(_ prepared: PreparedText, start: LayoutCursor) -> NormalizedLineStart? {
     var segmentIndex = start.segmentIndex
     let graphemeIndex = start.graphemeIndex
 
@@ -97,17 +123,20 @@ public func normalizeLineStart(_ prepared: PreparedText, start: LayoutCursor) ->
         return nil
     }
 
-    if graphemeIndex > 0 {
-        return start
-    }
-
     guard let chunkIndex = findChunkIndexForStart(prepared, segmentIndex: segmentIndex) else {
         return nil
     }
 
+    if graphemeIndex > 0 {
+        return NormalizedLineStart(cursor: start, chunkIndex: chunkIndex)
+    }
+
     let chunk = prepared.chunks[chunkIndex]
     if chunk.startSegmentIndex == chunk.endSegmentIndex, segmentIndex == chunk.startSegmentIndex {
-        return LayoutCursor(segmentIndex: segmentIndex, graphemeIndex: 0)
+        return NormalizedLineStart(
+            cursor: LayoutCursor(segmentIndex: segmentIndex, graphemeIndex: 0),
+            chunkIndex: chunkIndex
+        )
     }
 
     if segmentIndex < chunk.startSegmentIndex {
@@ -117,7 +146,10 @@ public func normalizeLineStart(_ prepared: PreparedText, start: LayoutCursor) ->
     while segmentIndex < chunk.endSegmentIndex {
         let kind = prepared.layoutKinds[segmentIndex]
         if kind != .space, kind != .zeroWidthBreak, kind != .softHyphen {
-            return LayoutCursor(segmentIndex: segmentIndex, graphemeIndex: 0)
+            return NormalizedLineStart(
+                cursor: LayoutCursor(segmentIndex: segmentIndex, graphemeIndex: 0),
+                chunkIndex: chunkIndex
+            )
         }
         segmentIndex += 1
     }
@@ -126,7 +158,14 @@ public func normalizeLineStart(_ prepared: PreparedText, start: LayoutCursor) ->
         return nil
     }
 
-    return LayoutCursor(segmentIndex: chunk.consumedEndSegmentIndex, graphemeIndex: 0)
+    return NormalizedLineStart(
+        cursor: LayoutCursor(segmentIndex: chunk.consumedEndSegmentIndex, graphemeIndex: 0),
+        chunkIndex: chunkIndex + 1
+    )
+}
+
+public func normalizeLineStart(_ prepared: PreparedText, start: LayoutCursor) -> LayoutCursor? {
+    normalizeLineStartWithChunk(prepared, start: start)?.cursor
 }
 
 public func countPreparedLines(_ prepared: PreparedText, maxWidth: Double) -> Int {
@@ -342,6 +381,13 @@ private func walkPreparedLinesSimple(
 
     var index = 0
     while index < widths.count {
+        if !hasContent {
+            index = normalizeSimpleLineStartSegmentIndex(prepared, segmentIndex: index)
+            if index >= widths.count {
+                break
+            }
+        }
+
         let width = widths[index]
         let kind = kinds[index]
 
@@ -721,19 +767,19 @@ public func layoutNextLineRange(
     start: LayoutCursor,
     maxWidth: Double
 ) -> InternalLayoutLine? {
-    guard let normalizedStart = normalizeLineStart(prepared, start: start) else {
+    guard let normalized = normalizeLineStartWithChunk(prepared, start: start) else {
         return nil
     }
 
     if prepared.simpleLineWalkFastPath {
-        return layoutNextLineRangeSimple(prepared, normalizedStart: normalizedStart, maxWidth: maxWidth)
+        return layoutNextLineRangeSimple(prepared, normalizedStart: normalized.cursor, maxWidth: maxWidth)
     }
 
-    guard let chunkIndex = findChunkIndexForStart(prepared, segmentIndex: normalizedStart.segmentIndex) else {
+    guard normalized.chunkIndex < prepared.chunks.count else {
         return nil
     }
 
-    let chunk = prepared.chunks[chunkIndex]
+    let chunk = prepared.chunks[normalized.chunkIndex]
     if chunk.startSegmentIndex == chunk.endSegmentIndex {
         return InternalLayoutLine(
             startSegmentIndex: chunk.startSegmentIndex,
@@ -757,8 +803,8 @@ public func layoutNextLineRange(
 
     var lineWidth = 0.0
     var hasContent = false
-    let lineStartSegmentIndex = normalizedStart.segmentIndex
-    let lineStartGraphemeIndex = normalizedStart.graphemeIndex
+    let lineStartSegmentIndex = normalized.cursor.segmentIndex
+    let lineStartGraphemeIndex = normalized.cursor.graphemeIndex
     var lineEndSegmentIndex = lineStartSegmentIndex
     var lineEndGraphemeIndex = lineStartGraphemeIndex
     var pendingBreakSegmentIndex = -1
@@ -906,9 +952,9 @@ public func layoutNextLineRange(
         return nil
     }
 
-    for index in normalizedStart.segmentIndex..<chunk.endSegmentIndex {
+    for index in normalized.cursor.segmentIndex..<chunk.endSegmentIndex {
         let kind = kinds[index]
-        let startGraphemeIndex = index == normalizedStart.segmentIndex ? normalizedStart.graphemeIndex : 0
+        let startGraphemeIndex = index == normalized.cursor.segmentIndex ? normalized.cursor.graphemeIndex : 0
         let width = kind == .tab ? getTabAdvance(lineWidth: lineWidth, tabStopAdvance: tabStopAdvance) : widths[index]
 
         if kind == .softHyphen, startGraphemeIndex == 0 {
