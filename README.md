@@ -47,15 +47,15 @@ Requires Xcode with iOS 18 / macOS 15 / watchOS 11 SDK support and Swift 6.0+.
 
 ## Demo
 
-<video src="https://raw.githubusercontent.com/webcpu/pretext-swift/main/Media/EditorialEngine.mp4" autoplay loop muted playsinline width="100%"></video>
-
+<video src="https://github.com/user-attachments/assets/1921d5dc-9cc2-440e-850a-09a4677ccbd5" autoplay loop muted playsinline width="100%"></video>
 **Editorial Engine** — dark multi-column editorial layout with animated orb obstacles
 
-<video src="https://raw.githubusercontent.com/webcpu/pretext-swift/main/Media/ChikaDance.mp4" autoplay loop muted playsinline width="100%"></video>
 
+
+<video src="https://github.com/user-attachments/assets/55311c47-9f07-4c02-a6e9-8bba69317c0e" autoplay loop muted playsinline width="100%"></video>
 **Chika Dance** — animated text reflow around live video silhouettes
 
-<video src="https://raw.githubusercontent.com/webcpu/pretext-swift/main/Media/Fluid.mp4" autoplay loop muted playsinline width="100%"></video>
+<video src="https://github.com/user-attachments/assets/24734a37-bbd3-4ac5-9281-e8f9258fb6e8" autoplay loop muted playsinline width="100%"></video>
 
 **Fluid** — particle-style text field reflow
 
