@@ -68,10 +68,10 @@ func cameraSilhouetteOverlayPanel(for state: CameraSilhouetteOverlayState) -> Ca
 }
 
 enum CameraSilhouettePalette {
-    static let paperRGB = SituationalAwarenessPalette.paperRGB
-    static let inkRGB = SituationalAwarenessPalette.inkRGB
-    static let paper = SituationalAwarenessPalette.paper
-    static let ink = SituationalAwarenessPalette.ink
+    static let paperRGB = DemoPaperPalette.paperRGB
+    static let inkRGB = DemoPaperPalette.inkRGB
+    static let paper = DemoPaperPalette.paper
+    static let ink = DemoPaperPalette.ink
     static let label = Color.white.opacity(0.88)
     static let secondaryLabel = Color.white.opacity(0.68)
     static let chipBackground = Color.black.opacity(0.34)

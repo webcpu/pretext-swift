@@ -10,7 +10,7 @@ struct DemoRGBColor: Equatable {
     }
 }
 
-enum SituationalAwarenessPalette {
+enum DemoPaperPalette {
     static let paperRGB = DemoRGBColor(
         red: 246 / 255,
         green: 240 / 255,

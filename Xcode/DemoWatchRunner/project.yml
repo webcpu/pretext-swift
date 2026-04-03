@@ -48,8 +48,8 @@ targets:
     sources:
       - path: ../../Sources/Demo
         excludes:
-          - CameraSilhouette
-          - ChikaDance
+          - Features/CameraSilhouette
+          - Features/ChikaDance
           - Resources/camera-silhouette
           - Resources/dance.mp4
       - path: ../DemoDeviceRunner/DemoBundleModuleShim.swift

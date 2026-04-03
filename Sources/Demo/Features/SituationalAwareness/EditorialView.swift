@@ -27,8 +27,8 @@ private struct AnimationSnapshot {
 }
 
 private enum EditorialPalette {
-    static let paper = SituationalAwarenessPalette.paper
-    static let ink = SituationalAwarenessPalette.ink
+    static let paper = DemoPaperPalette.paper
+    static let ink = DemoPaperPalette.ink
     static let accent = Color(red: 217 / 255, green: 119 / 255, blue: 87 / 255)
     static let mutedInk = ink.opacity(0.58)
     static let hintBackground = ink.opacity(0.94)
