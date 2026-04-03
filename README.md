@@ -1,71 +1,137 @@
 # Pretext Swift
 
-A native Swift port of the [Pretext](https://github.com/chenglou/pretext) text layout engine. Measures and lays out multiline text without touching the view hierarchy — pure arithmetic over cached Core Text measurements.
+A native Swift port of the [Pretext](https://github.com/chenglou/pretext) text layout engine. It measures and lays out multiline text without touching the view hierarchy, so repeated layout stays pure arithmetic over cached Core Text measurements.
+
+The package currently ships four targets:
+
+- `Pretext`: core layout engine
+- `PretextUI`: optional SwiftUI bridge for `FontDescriptor`
+- `Demo`: interactive sample app
+- `Benchmark`: standalone benchmark app backed by shared benchmark support code
 
 ## Performance
 
-On the bundled release benchmark, Pretext is about **6x faster than Core Text** and **16x faster than SwiftUI** for batch text layout:
+On the current release benchmark table, Pretext is about **5.8x faster than Core Text** and **17.9x faster than SwiftUI** for `Batch Prepare + Layout (500 texts)`.
 
-```
-Pretext:     4.6ms   (500 texts, prepare + layout)
-Core Text:  28.6ms   (CTFramesetterSuggestFrameSizeWithConstraints)
-SwiftUI:    76.5ms   (NSHostingView + fittingSize)
-```
+| Test | Pretext | Core Text | SwiftUI | Vs CT | Vs SwiftUI |
+|---|---:|---:|---:|---:|---:|
+| Batch Prepare + Layout (500 texts) | 4.9ms | 28.5ms | 87.8ms | 5.8x | 17.9x |
+| Reflow 100 Widths (50k calls) | 7.0ms | 1895ms | 11703ms | 272x | 1680x |
+| Variable-Width Line-by-Line | 0.08ms | 1.6ms | — | 19.1x | — |
+| Interleaved Measure-Mutate (500x) | 4.8ms | 28.8ms | 91.4ms | 6.0x | 19.0x |
+| Masonry Heights (1904 texts) | 8.4ms | 25.9ms | 307ms | 3.1x | 36.7x |
 
-The hot `layout()` path is pure arithmetic. Measurement happens once in `prepare(...)`; repeated layout uses cached widths.
+The hot `layout()` path is pure arithmetic. Measurement happens once in `prepare(...)`; repeated layout reuses cached widths.
 
 ## Platform Support
 
-- `Pretext` supports `iOS 18+` and `macOS 15+`
+- `Pretext` supports `iOS 18+`, `macOS 15+`, and `watchOS 11+`
 - `PretextUI` provides the optional `SwiftUI.Font` bridge on those same platforms
-- `Demo` supports `iPhone`, `iPad`, and `macOS` in this repository
-- `Benchmark` remains a macOS-only showcase app
+- `Demo` supports `iPhone`, `iPad`, `macOS`, and a curated Apple Watch catalog in this repository
+- the standalone `Benchmark` executable remains macOS-first, while the shared benchmark presentation is also used inside the demo app
 
 ## Build & Run
 
 ```bash
-# Build debug binaries
-rake build
-
-# Validate the Pretext library for iOS Simulator
-rake build_ios_pretext
-
-# Build the demo app for iPhone and iPad simulators
-rake build_ios_demo
-
-# Run iOS demo tests
-rake test_ios_demo
-
-# Launch the demo app
+# Launch the macOS demo app
 rake demo
+
+# Run the full SwiftPM test suite
+rake test
 
 # Run the CLI benchmark
 rake bench
-
-# Run tests
-rake test
 ```
 
-Requires Xcode with iOS 18 / macOS 15 SDK support and Swift 6.0+.
+Requires Xcode with iOS 18 / macOS 15 / watchOS 11 SDK support and Swift 6.0+.
 
 ## Demo
 
-The demo app includes:
+The demo app currently includes:
 
 - `Situational Awareness`: light editorial layout with obstacle-aware text flow
 - `Editorial Engine`: dark multi-column editorial layout with animated orb obstacles
 - `Masonry`: waterfall card layout driven by cached text measurement
 - `Chika Dance`: animated reflow around live video silhouettes
+- `Illustrated Manuscript`: decorated long-form layout with physics-driven page composition
+- `Live Camera Silhouette`: camera-driven text routing around a live subject silhouette
+- `Fluid`: particle-style text field reflow
 - `Benchmark`: in-app performance comparison against Core Text and SwiftUI
+
+On Apple Watch, the catalog is intentionally narrower and currently includes:
+
+- `Situational Awareness`
+- `Editorial Engine`
+- `Masonry`
+- `Illustrated Manuscript`
+- `Fluid`
+- `Benchmark`
+
+## API
+
+### Fast path: measure a paragraph without touching SwiftUI layout
+
+```swift
+import CoreText
+import Pretext
+
+let font = CTFontCreateWithName("Helvetica Neue" as CFString, 16, nil)
+let prepared = prepare("AGI 春天到了. بدأت الرحلة 🚀", font: font)
+let result = layout(prepared, maxWidth: 320, lineHeight: 20)
+
+print(result.lineCount)
+print(result.height)
+```
+
+If you want textarea-style preserved spaces, tabs, and hard breaks, use `whiteSpace: .preWrap` during `prepare(...)`.
+
+### Rich path: inspect lines or stream them one line at a time
+
+```swift
+import CoreText
+import Pretext
+
+let font = CTFontCreateWithName("Helvetica Neue" as CFString, 18, nil)
+let prepared = prepareWithSegments("AGI 春天到了. بدأت الرحلة 🚀", font: font)
+
+let (result, lines) = layoutWithLines(prepared, maxWidth: 320, lineHeight: 26)
+let naturalWidth = measureNaturalWidth(prepared)
+
+walkLineRanges(prepared, maxWidth: 320) { width, start, end in
+    print(width, start, end)
+}
+
+var cursor = LayoutCursor.start
+while let line = layoutNextLine(prepared, start: cursor, maxWidth: 320) {
+    print(line.text)
+    cursor = line.end
+}
+```
+
+Useful helpers:
+
+- `prepareForWidth(...)`: lazily resolves breakable grapheme widths for a specific width
+- `measureNaturalWidth(...)`: returns the widest forced line when width itself is not causing wraps
+- `setLocale(...)`: retargets text analysis for future `prepare(...)` calls
+- `clearCache()`: clears shared analysis and measurement caches
+
+### SwiftUI bridge
+
+```swift
+import PretextUI
+
+let descriptor = FontDescriptor(familyName: "Helvetica Neue", size: 16)
+let displayFont = descriptor.makeDisplayFont()
+```
 
 ## How It Works
 
-1. `prepare(text, font)` segments text, measures runs with Core Text, and caches widths.
+1. `prepare(text, font)` or `prepareWithSegments(text, font)` segments text, measures runs with Core Text, and caches widths.
 2. `layout(prepared, maxWidth, lineHeight)` computes multiline layout from cached widths.
-3. `layoutNextLine(prepared, cursor, maxWidth)` supports line-by-line flow for variable-width layouts.
+3. `layoutWithLines(...)`, `walkLineRanges(...)`, and `layoutNextLine(...)` expose the richer manual-layout path.
 4. `measureNaturalWidth(prepared)` returns the widest forced line for rich/manual layout work.
 
-The key idea is separating measurement from layout so animated obstacle reflow can stay cheap.
+The key idea is separating measurement from layout so resize and animated obstacle reflow stay cheap. Measurement happens once up front; repeated layout is pure arithmetic over cached widths.
 
 ## Credits
 
