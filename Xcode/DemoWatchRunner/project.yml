@@ -28,7 +28,7 @@ targets:
     platform: watchOS
     deploymentTarget: "11.0"
     sources:
-      - path: ../../Sources/Benchmark
+      - path: ../../Sources/BenchmarkSupport
     dependencies:
       - package: PretextSwift
         product: Pretext

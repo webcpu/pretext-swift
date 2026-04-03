@@ -32,23 +32,27 @@ The engine has a clean two-phase split:
 ### Important files
 
 **Pretext library** (`Sources/Pretext/`):
-- `LayoutAPI.swift` — public API: `prepare()`, `layout()`, `layoutNextLine()`, `walkLineRanges()`
-- `TextAnalysis.swift` — UTF-8 byte scanner, whitespace normalization, punctuation merging
-- `TextMeasurement.swift` — Core Text glyph advance measurement, segment cache
-- `LineBreaker.swift` — pure arithmetic line-breaking engine (~1100 lines)
-- `PreparedText.swift` — all data types
+- `API/LayoutAPI.swift` — public API: `prepare()`, `layout()`, `layoutNextLine()`, `walkLineRanges()`
+- `Engine/TextAnalysis.swift` — UTF-8 byte scanner, whitespace normalization, punctuation merging
+- `Engine/TextMeasurement.swift` — Core Text glyph advance measurement, segment cache
+- `Engine/LineBreaker.swift` — pure arithmetic line-breaking engine (~1100 lines)
+- `Model/PreparedText.swift` — all data types
 
 **PretextUI bridge** (`Sources/PretextUI/`):
-- `FontDescriptor+SwiftUI.swift` — SwiftUI helper kept out of the core target
+- `Extensions/FontDescriptor+SwiftUI.swift` — SwiftUI helper kept out of the core target
 
 **Demo app** (`Sources/Demo/`):
-- `DemoApp.swift` — app entry point
-- `Editorial/EditorialView.swift` — "Situational Awareness" demo (light theme, logo obstacles)
-- `Editorial/OrbEditorialView.swift` — "Editorial Engine" demo (dark theme, floating orbs)
+- `App/DemoApp.swift` — app entry point
+- `Features/SituationalAwareness/EditorialView.swift` — "Situational Awareness" demo (light theme, logo obstacles)
+- `Features/EditorialEngine/OrbEditorialView.swift` — "Editorial Engine" demo (dark theme, floating orbs)
+
+**Benchmark support** (`Sources/BenchmarkSupport/`):
+- `Core/BenchmarkCorpus.swift` — benchmark corpus and shared typography constants
+- `Core/BenchmarkScenarios.swift` — the five benchmark scenarios
+- `UI/BenchmarkView.swift` — benchmark UI shared by the app and demo
 
 **Benchmark app** (`Sources/Benchmark/`):
-- `BenchmarkApp.swift` — app entry point, `--cli` mode
-- `BenchmarkTests.swift` — 5 benchmark tests
+- `App/BenchmarkApp.swift` — app entry point, `--cli` mode
 
 **Tests:**
 - `Tests/PretextTests/` — core engine tests (CoreEngineTests, LineBreakerTests, TextAnalysisTests)

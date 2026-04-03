@@ -8,7 +8,7 @@ targets:
     platform: macOS
     deploymentTarget: "15.0"
     sources:
-      - path: ../../Sources/Benchmark
+      - path: ../../Sources/BenchmarkSupport
     dependencies:
       - package: PretextSwift
         product: Pretext

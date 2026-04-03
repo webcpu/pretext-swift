@@ -47,12 +47,12 @@ let package = Package(
         .target(
             name: "BenchmarkSupport",
             dependencies: ["Pretext", "PretextUI"],
-            path: "Sources/Benchmark"
+            path: "Sources/BenchmarkSupport"
         ),
         .executableTarget(
             name: "Benchmark",
             dependencies: ["BenchmarkSupport"],
-            path: "Sources/BenchmarkApp"
+            path: "Sources/Benchmark"
         ),
         .testTarget(
             name: "PretextTests",

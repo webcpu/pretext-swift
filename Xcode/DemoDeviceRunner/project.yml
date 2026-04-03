@@ -28,7 +28,7 @@ targets:
     platform: iOS
     deploymentTarget: "18.0"
     sources:
-      - path: ../../Sources/Benchmark
+      - path: ../../Sources/BenchmarkSupport
     dependencies:
       - package: PretextSwift
         product: Pretext
