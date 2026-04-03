@@ -65,8 +65,92 @@ final class EditorialLayoutTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(evaluated.claudeRect.y, headlineBottom + 8)
     }
 
-    func testEditorialInteractionHintUsesTapLanguageOnNarrowLayouts() {
-        XCTAssertEqual(editorialInteractionHintText(isNarrow: true), "Tap the logos to spin them.")
-        XCTAssertTrue(editorialInteractionHintText(isNarrow: false).contains("click the logos"))
+    func testNarrowLayoutLeavesRoomForTopHintPill() {
+        let layout = buildLayout(pageWidth: 390, pageHeight: 844, lineHeight: EditorialMetrics.bodyLineHeight)
+
+        XCTAssertGreaterThanOrEqual(layout.headlineRegion.y, EditorialMetrics.narrowHintPillSafeTop)
+    }
+
+    func testEditorialInteractionHintExplainsAutoSpinOnNarrowLayouts() {
+        XCTAssertEqual(
+            editorialInteractionHintText(isNarrow: true),
+            "The logos spin in. Tap either one to spin it again."
+        )
+    }
+
+    func testEditorialInteractionHintMatchesWebPhrasingOnDesktop() {
+        XCTAssertEqual(
+            editorialInteractionHintText(isNarrow: false),
+            "Everything laid out in Swift. Click the logos."
+        )
+    }
+
+    func testEditorialIntroSpinPlanStartsBothLogosFromRest() {
+        let plan = editorialIntroSpinPlan(startTime: 123)
+
+        XCTAssertEqual(plan.openai, SpinState(from: 0, to: -.pi, start: 123, duration: 0.9))
+        XCTAssertEqual(plan.claude, SpinState(from: 0, to: .pi, start: 123, duration: 0.9))
+    }
+
+    func testEditorialAutoSpinRunsOnAllSupportedPlatforms() {
+        XCTAssertTrue(editorialShouldAutoSpinOnAppear(platform: .ios))
+        XCTAssertTrue(editorialShouldAutoSpinOnAppear(platform: .macOS))
+    }
+
+    func testEditorialHintTopPaddingAccountsForMacOSWindowChrome() {
+        XCTAssertEqual(
+            editorialHintTopPadding(safeAreaTop: 0, platform: .ios),
+            16
+        )
+        XCTAssertEqual(
+            editorialHintTopPadding(safeAreaTop: 0, platform: .macOS),
+            52
+        )
+        XCTAssertEqual(
+            editorialHintTopPadding(safeAreaTop: 28, platform: .macOS),
+            52
+        )
+    }
+
+    func testEditorialHintStyleUsesLargerDesktopPillForWebParity() {
+        let desktop = editorialHintStyle(isNarrow: false, platform: .macOS)
+        let narrow = editorialHintStyle(isNarrow: true, platform: .ios)
+
+        XCTAssertEqual(desktop.fontSize, 15)
+        XCTAssertEqual(desktop.horizontalPadding, 22)
+        XCTAssertEqual(desktop.verticalPadding, 13)
+        XCTAssertNil(desktop.maxWidth)
+
+        XCTAssertEqual(narrow.fontSize, 12)
+        XCTAssertEqual(narrow.horizontalPadding, 16)
+        XCTAssertEqual(narrow.verticalPadding, 10)
+        XCTAssertEqual(
+            narrow.maxWidth,
+            320
+        )
+    }
+
+    func testDesktopRightColumnReflowsWhenLogosSpin() {
+        let layout = buildLayout(pageWidth: 1120, pageHeight: 780, lineHeight: EditorialMetrics.bodyLineHeight)
+        let resting = evaluateLayout(
+            layout: layout,
+            lineHeight: EditorialMetrics.bodyLineHeight,
+            preparedBody: EditorialAssets.bodyPrepared,
+            openaiLogo: EditorialAssets.openaiLogo,
+            claudeLogo: EditorialAssets.claudeLogo,
+            openaiAngle: 0,
+            claudeAngle: 0
+        )
+        let spinning = evaluateLayout(
+            layout: layout,
+            lineHeight: EditorialMetrics.bodyLineHeight,
+            preparedBody: EditorialAssets.bodyPrepared,
+            openaiLogo: EditorialAssets.openaiLogo,
+            claudeLogo: EditorialAssets.claudeLogo,
+            openaiAngle: -.pi * 0.5,
+            claudeAngle: .pi * 0.5
+        )
+
+        XCTAssertNotEqual(resting.rightLines, spinning.rightLines)
     }
 }

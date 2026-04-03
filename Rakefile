@@ -91,6 +91,39 @@ def watchos_demo_device
   }
 end
 
+def ios_demo_device
+  requested = ENV["IOS_DEVICE"]
+  devices = devicectl_devices
+
+  device = if requested
+    devices.find do |entry|
+      [
+        entry["identifier"],
+        entry.dig("hardwareProperties", "udid"),
+        entry.dig("deviceProperties", "name"),
+      ].compact.include?(requested)
+    end
+  else
+    devices.find do |entry|
+      entry.dig("hardwareProperties", "platform") == "iOS" &&
+        entry.dig("hardwareProperties", "reality") == "physical" &&
+        entry.dig("connectionProperties", "tunnelState") == "connected"
+    end
+  end
+
+  if device.nil? && requested
+    raise "No iOS device matching IOS_DEVICE=#{requested.inspect} found."
+  end
+
+  raise "No connected physical iOS device found. Set IOS_DEVICE to a device name, identifier, or UDID to override." if device.nil?
+
+  {
+    name: device.dig("deviceProperties", "name") || device.fetch("identifier"),
+    selector: requested || device.dig("hardwareProperties", "udid") || device.fetch("identifier"),
+    udid: device.dig("hardwareProperties", "udid") || device.fetch("identifier"),
+  }
+end
+
 def ios_simulator_destination(name_prefix)
   devices = JSON.parse(`xcrun simctl list devices available --json`).fetch("devices").values.flatten
   device = devices.find { |entry| entry["isAvailable"] && entry["name"].start_with?(name_prefix) }
@@ -162,6 +195,49 @@ task :run_watchos_demo do
   sh "xcrun devicectl device install app --device #{device_selector} #{app_path_escaped}"
 
   Dir.mktmpdir("watchos-demo-run") do |tmpdir|
+    launch_json = File.join(tmpdir, "launch.json")
+    processes_json = File.join(tmpdir, "processes.json")
+    launch_json_escaped = Shellwords.escape(launch_json)
+    processes_json_escaped = Shellwords.escape(processes_json)
+
+    sh "xcrun devicectl device process launch --device #{device_selector} #{bundle_id} --activate --terminate-existing --json-output #{launch_json_escaped}"
+
+    process_id = JSON.parse(File.read(launch_json)).dig("result", "process", "processIdentifier")
+    sleep 2
+
+    sh "xcrun devicectl device info processes --device #{device_selector} --json-output #{processes_json_escaped}"
+
+    running_processes = JSON.parse(File.read(processes_json)).dig("result", "runningProcesses").to_a
+    running = running_processes.any? { |entry| entry["processIdentifier"] == process_id }
+    raise "Demo.app exited immediately after launch on #{device.fetch(:name)}." unless running
+  end
+
+  puts "Launched #{bundle_id} on #{device.fetch(:name)} (#{device.fetch(:udid)})."
+end
+
+desc "Build, install, and launch the Demo iOS app on a connected iPhone or iPad"
+task :run_ios_demo do
+  device = ios_demo_device
+  device_selector = Shellwords.escape(device.fetch(:selector))
+  destination = "id=#{device.fetch(:udid)}"
+
+  sh "xcodegen generate --spec Xcode/DemoDeviceRunner/project.yml"
+  sh "xcodebuild -project Xcode/DemoDeviceRunner/DemoDeviceRunner.xcodeproj -scheme DemoDeviceRunner -configuration Release -destination 'id=#{device.fetch(:udid)}' build"
+
+  app_path = xcode_built_product_path(
+    project: "Xcode/DemoDeviceRunner/DemoDeviceRunner.xcodeproj",
+    scheme: "DemoDeviceRunner",
+    configuration: "Release",
+    destination: destination
+  )
+  raise "Built Demo.app not found at #{app_path}." unless File.exist?(app_path)
+
+  app_path_escaped = Shellwords.escape(app_path)
+  bundle_id = "com.liang.pretextswift.demodevicerunner"
+
+  sh "xcrun devicectl device install app --device #{device_selector} #{app_path_escaped}"
+
+  Dir.mktmpdir("ios-demo-run") do |tmpdir|
     launch_json = File.join(tmpdir, "launch.json")
     processes_json = File.join(tmpdir, "processes.json")
     launch_json_escaped = Shellwords.escape(launch_json)

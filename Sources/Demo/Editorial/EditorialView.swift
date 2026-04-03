@@ -7,7 +7,7 @@ private enum LogoKind {
     case claude
 }
 
-private struct SpinState {
+struct SpinState: Equatable {
     var from: Double
     var to: Double
     var start: TimeInterval
@@ -37,48 +37,102 @@ private enum EditorialPalette {
     static let leftAtmosphereSecondary = Color(red: 57 / 255, green: 78 / 255, blue: 124 / 255)
 }
 
+struct EditorialHintStyle: Equatable {
+    var fontSize: Double
+    var weightValue: Double
+    var horizontalPadding: Double
+    var verticalPadding: Double
+    var maxWidth: Double?
+}
+
 func editorialInteractionHintText(isNarrow: Bool) -> String {
     if isNarrow {
-        return "Tap the logos to spin them."
+        return "The logos spin in. Tap either one to spin it again."
     }
-    return "Everything laid out in Swift. Resize the window, then click the logos."
+    return "Everything laid out in Swift. Click the logos."
+}
+
+func editorialShouldAutoSpinOnAppear(
+    platform: DemoNavigationPlatform = .current
+) -> Bool {
+    switch platform {
+    case .ios, .macOS, .watchOS:
+        true
+    }
+}
+
+func editorialHintTopPadding(
+    safeAreaTop: Double,
+    platform: DemoNavigationPlatform = .current
+) -> Double {
+    switch platform {
+    case .macOS:
+        max(safeAreaTop + 24, 52)
+    case .ios, .watchOS:
+        16
+    }
+}
+
+func editorialHintStyle(
+    isNarrow: Bool,
+    platform: DemoNavigationPlatform = .current
+) -> EditorialHintStyle {
+    if platform == .macOS, !isNarrow {
+        return EditorialHintStyle(
+            fontSize: 15,
+            weightValue: 0.34,
+            horizontalPadding: 22,
+            verticalPadding: 13,
+            maxWidth: nil
+        )
+    }
+
+    return EditorialHintStyle(
+        fontSize: 12,
+        weightValue: 0.23,
+        horizontalPadding: 16,
+        verticalPadding: 10,
+        maxWidth: isNarrow ? 320 : nil
+    )
+}
+
+func editorialIntroSpinPlan(startTime: TimeInterval) -> (openai: SpinState, claude: SpinState) {
+    (
+        openai: SpinState(from: 0, to: -.pi, start: startTime, duration: 0.9),
+        claude: SpinState(from: 0, to: .pi, start: startTime, duration: 0.9)
+    )
 }
 
 private struct HintPillView: View {
-    private static let font = FontDescriptor(
-        familyName: "Helvetica Neue",
-        size: 12,
-        weightValue: 0.23
-    )
-    .makeDisplayFont()
+    let isNarrow: Bool
+    let platform: DemoNavigationPlatform
+
+    private var style: EditorialHintStyle {
+        editorialHintStyle(isNarrow: isNarrow, platform: platform)
+    }
+
+    private var hintFont: Font {
+        FontDescriptor(
+            familyName: "Helvetica Neue",
+            size: style.fontSize,
+            weightValue: style.weightValue
+        )
+        .makeDisplayFont()
+    }
 
     var body: some View {
-        Text(editorialInteractionHintText(isNarrow: false))
-            .font(Self.font)
-            .tracking(12 * 0.015)
+        Text(editorialInteractionHintText(isNarrow: isNarrow))
+            .lineLimit(isNarrow ? 2 : 1)
+            .multilineTextAlignment(.center)
             .foregroundStyle(EditorialPalette.hintText)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
+            .padding(.horizontal, style.horizontalPadding)
+            .padding(.vertical, style.verticalPadding)
+            .frame(maxWidth: style.maxWidth.map { CGFloat($0) })
+            .fixedSize(horizontal: !isNarrow, vertical: false)
+            .environment(\.font, hintFont)
             .background(EditorialPalette.hintBackground)
             .clipShape(Capsule())
             .shadow(color: EditorialPalette.ink.opacity(0.16), radius: 32, x: 0, y: 14)
-            .allowsHitTesting(false)
-    }
-}
-
-private struct InlineHintView: View {
-    private static let font = FontDescriptor(
-        familyName: "Helvetica Neue",
-        size: 11,
-        weightValue: 0.18
-    )
-    .makeDisplayFont()
-
-    var body: some View {
-        Text(editorialInteractionHintText(isNarrow: true))
-            .font(Self.font)
-            .tracking(11 * 0.06)
-            .foregroundStyle(EditorialPalette.mutedInk)
             .allowsHitTesting(false)
     }
 }
@@ -148,6 +202,16 @@ private struct EditorialBackgroundView: View {
     }
 }
 
+private struct EditorialTextProjection: Equatable {
+    var headlineLines: [PositionedLine]
+    var headlineFontSize: Double
+    var headlineLineHeight: Double
+    var creditLeft: Double
+    var creditTop: Double
+    var isNarrow: Bool
+    var bodyLines: [PositionedLine]
+}
+
 private struct HeadlineLineView: View {
     var line: PositionedLine
     var fontSize: Double
@@ -163,6 +227,32 @@ private struct HeadlineLineView: View {
             .frame(height: lineHeight, alignment: .topLeading)
             .offset(x: line.x, y: line.y)
             .zIndex(1)
+    }
+}
+
+private struct EditorialTextLayerView: View, Equatable {
+    var projection: EditorialTextProjection
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            ForEach(projection.headlineLines, id: \.self) { line in
+                HeadlineLineView(
+                    line: line,
+                    fontSize: projection.headlineFontSize,
+                    lineHeight: projection.headlineLineHeight
+                )
+            }
+
+            CreditLineView(
+                left: projection.creditLeft,
+                top: projection.creditTop,
+                isNarrow: projection.isNarrow
+            )
+
+            ForEach(projection.bodyLines, id: \.self) { line in
+                BodyLineView(line: line)
+            }
+        }
     }
 }
 
@@ -249,6 +339,7 @@ struct EditorialView: View {
     @State private var claudeAnimation = LogoAnimationState()
     @State private var isAnimating = false
     @State private var hoverLocation: CGPoint?
+    @State private var hasPlayedIntroSpin = false
 
     var body: some View {
         GeometryReader { proxy in
@@ -273,28 +364,22 @@ struct EditorialView: View {
                 )
                 let hoveredLogo = hoveredLogoKind(at: hoverLocation, hits: evaluated.hits)
                 let bodyLines = evaluated.leftLines + evaluated.rightLines
+                let textProjection = EditorialTextProjection(
+                    headlineLines: evaluated.headlineLines,
+                    headlineFontSize: layout.headlineFontSize,
+                    headlineLineHeight: layout.headlineLineHeight,
+                    creditLeft: evaluated.creditLeft,
+                    creditTop: evaluated.creditTop,
+                    isNarrow: layout.isNarrow,
+                    bodyLines: bodyLines
+                )
 
                 ZStack(alignment: .topLeading) {
                     EditorialBackgroundView(size: proxy.size)
                         .allowsHitTesting(false)
 
-                    ForEach(Array(evaluated.headlineLines.enumerated()), id: \.offset) { _, line in
-                        HeadlineLineView(
-                            line: line,
-                            fontSize: layout.headlineFontSize,
-                            lineHeight: layout.headlineLineHeight
-                        )
-                    }
-
-                    CreditLineView(
-                        left: evaluated.creditLeft,
-                        top: evaluated.creditTop,
-                        isNarrow: layout.isNarrow
-                    )
-
-                    ForEach(Array(bodyLines.enumerated()), id: \.offset) { _, line in
-                        BodyLineView(line: line)
-                    }
+                    EditorialTextLayerView(projection: textProjection)
+                        .equatable()
 
                     LogoImageView(
                         kind: .openai,
@@ -311,19 +396,17 @@ struct EditorialView: View {
                         angle: snapshot.claudeAngle
                     )
 
-                    if !layout.isNarrow {
-                        HintPillView()
-                            .frame(maxWidth: .infinity, alignment: .center)
-                            .padding(.top, 16)
-                            .zIndex(5)
-                    } else {
-                        InlineHintView()
-                            .offset(
-                                x: evaluated.creditLeft,
-                                y: evaluated.creditTop + EditorialMetrics.creditLineHeight + 10
+                    HintPillView(isNarrow: layout.isNarrow, platform: .current)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding(
+                            .top,
+                            editorialHintTopPadding(
+                                safeAreaTop: proxy.safeAreaInsets.top,
+                                platform: .current
                             )
-                            .zIndex(4)
-                    }
+                        )
+                        .padding(.horizontal, 16)
+                        .zIndex(5)
                 }
                 .frame(width: proxy.size.width, height: proxy.size.height, alignment: .topLeading)
                 .background(EditorialPalette.paper)
@@ -350,6 +433,13 @@ struct EditorialView: View {
                     }
                 }
             }
+        }
+        .onAppear {
+            guard !hasPlayedIntroSpin, editorialShouldAutoSpinOnAppear() else {
+                return
+            }
+            hasPlayedIntroSpin = true
+            startIntroSpin(now: Date().timeIntervalSinceReferenceDate)
         }
         .preferredColorScheme(.light)
     }
@@ -395,6 +485,13 @@ struct EditorialView: View {
                 duration: 0.9
             )
         }
+        isAnimating = true
+    }
+
+    private func startIntroSpin(now: TimeInterval) {
+        let plan = editorialIntroSpinPlan(startTime: now)
+        openaiAnimation.spin = plan.openai
+        claudeAnimation.spin = plan.claude
         isAnimating = true
     }
 

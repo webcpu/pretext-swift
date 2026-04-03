@@ -18,6 +18,7 @@ enum EditorialMetrics {
     static let bodyLineHeight = 32.0
     static let creditLineHeight = 16.0
     static let hintPillSafeTop = 72.0
+    static let narrowHintPillSafeTop = 88.0
     static let narrowBreakpoint = 760.0
     static let narrowColumnMaxWidth = 430.0
     static let bodyLetterSpacing = bodyFontDescriptor.size * 0.002
@@ -68,7 +69,7 @@ enum EditorialMetrics {
     }
 }
 
-struct PositionedLine: Equatable {
+struct PositionedLine: Equatable, Hashable {
     var x: Double
     var y: Double
     var width: Double
@@ -151,7 +152,7 @@ func buildLayout(pageWidth: Double, pageHeight: Double, lineHeight: Double) -> P
         let gutter = max(18, min(28, pageWidth * 0.06)).rounded()
         let centerGap = 0.0
         let columnWidth = min(pageWidth - gutter * 2, EditorialMetrics.narrowColumnMaxWidth).rounded()
-        let headlineTop = 28.0
+        let headlineTop = EditorialMetrics.narrowHintPillSafeTop
         let headlineWidth = pageWidth - gutter * 2
         let headlineFontSize = min(48, fitHeadlineFontSize(headlineWidth: headlineWidth, pageWidth: pageWidth))
         let headlineLineHeight = (headlineFontSize * 0.92).rounded()
