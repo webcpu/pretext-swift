@@ -47,15 +47,24 @@ Requires Xcode with iOS 18 / macOS 15 / watchOS 11 SDK support and Swift 6.0+.
 
 ## Demo
 
-The demo app currently includes:
+<video src="Media/EditorialEngine.mp4" autoplay loop muted playsinline width="100%"></video>
+
+**Editorial Engine** — dark multi-column editorial layout with animated orb obstacles
+
+<video src="Media/ChikaDance.mp4" autoplay loop muted playsinline width="100%"></video>
+
+**Chika Dance** — animated text reflow around live video silhouettes
+
+<video src="Media/Fluid.mp4" autoplay loop muted playsinline width="100%"></video>
+
+**Fluid** — particle-style text field reflow
+
+The demo app also includes:
 
 - `Situational Awareness`: light editorial layout with obstacle-aware text flow
-- `Editorial Engine`: dark multi-column editorial layout with animated orb obstacles
 - `Masonry`: waterfall card layout driven by cached text measurement
-- `Chika Dance`: animated reflow around live video silhouettes
 - `Illustrated Manuscript`: decorated long-form layout with physics-driven page composition
 - `Live Camera Silhouette`: camera-driven text routing around a live subject silhouette
-- `Fluid`: particle-style text field reflow
 - `Benchmark`: in-app performance comparison against Core Text and SwiftUI
 
 On Apple Watch, the catalog is intentionally narrower and currently includes:
