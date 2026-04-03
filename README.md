@@ -136,3 +136,9 @@ The key idea is separating measurement from layout so resize and animated obstac
 ## Credits
 
 Based on [Pretext](https://github.com/chenglou/pretext) by Cheng Lou. The Swift port reimplements the text analysis pipeline, line-breaking engine, and editorial demos using Core Text for measurement and SwiftUI Canvas for rendering.
+
+Demo-specific credits:
+
+- `Chika Dance` uses a bundled sample clip sourced via [Matteflow](https://github.com/summerKK/Matteflow) by `summerKK`; Matteflow credits the underlying `Chika Dance Green Screen` footage to [Conics](https://www.youtube.com/@LConics).
+- `Illustrated Manuscript` adapts the `Dragon` demo from [Pretext Playground](https://pretext-playground.builderz.dev) by Builderz.
+- `Fluid` adapts [fluid.felixmartinez.dev](https://fluid.felixmartinez.dev) by Felix Martinez.
