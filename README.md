@@ -2,13 +2,6 @@
 
 A native Swift port of the [Pretext](https://github.com/chenglou/pretext) text layout engine. It measures and lays out multiline text without touching the view hierarchy, so repeated layout stays pure arithmetic over cached Core Text measurements.
 
-The package currently ships four targets:
-
-- `Pretext`: core layout engine
-- `PretextUI`: optional SwiftUI bridge for `FontDescriptor`
-- `Demo`: interactive sample app
-- `Benchmark`: standalone benchmark app backed by shared benchmark support code
-
 ## Performance
 
 On the current release benchmark table, Pretext is about **5.8x faster than Core Text** and **17.9x faster than SwiftUI** for `Batch Prepare + Layout (500 texts)`.
@@ -23,36 +16,14 @@ On the current release benchmark table, Pretext is about **5.8x faster than Core
 
 The hot `layout()` path is pure arithmetic. Measurement happens once in `prepare(...)`; repeated layout reuses cached widths.
 
-## Platform Support
-
-- `Pretext` supports `iOS 18+`, `macOS 15+`, and `watchOS 11+`
-- `PretextUI` provides the optional `SwiftUI.Font` bridge on those same platforms
-- `Demo` supports `iPhone`, `iPad`, `macOS`, and a curated Apple Watch catalog in this repository
-- the standalone `Benchmark` executable remains macOS-first, while the shared benchmark presentation is also used inside the demo app
-
-## Build & Run
-
-```bash
-# Launch the macOS demo app
-rake demo
-
-# Run the full SwiftPM test suite
-rake test
-
-# Run the CLI benchmark
-rake bench
-```
-
-Requires Xcode with iOS 18 / macOS 15 / watchOS 11 SDK support and Swift 6.0+.
-
 ## Demo
 
 <video src="https://github.com/user-attachments/assets/1921d5dc-9cc2-440e-850a-09a4677ccbd5" autoplay loop muted playsinline width="100%"></video>
+
 **Editorial Engine** — dark multi-column editorial layout with animated orb obstacles
 
-
-
 <video src="https://github.com/user-attachments/assets/55311c47-9f07-4c02-a6e9-8bba69317c0e" autoplay loop muted playsinline width="100%"></video>
+
 **Chika Dance** — animated text reflow around live video silhouettes
 
 <video src="https://github.com/user-attachments/assets/24734a37-bbd3-4ac5-9281-e8f9258fb6e8" autoplay loop muted playsinline width="100%"></video>
@@ -75,6 +46,35 @@ On Apple Watch, the catalog is intentionally narrower and currently includes:
 - `Illustrated Manuscript`
 - `Fluid`
 - `Benchmark`
+
+## Platform Support
+
+- `Pretext` supports `iOS 18+`, `macOS 15+`, and `watchOS 11+`
+- `PretextUI` provides the optional `SwiftUI.Font` bridge on those same platforms
+- `Demo` supports `iPhone`, `iPad`, `macOS`, and a curated Apple Watch catalog in this repository
+- the standalone `Benchmark` executable remains macOS-first, while the shared benchmark presentation is also used inside the demo app
+
+## Build & Run
+
+The package ships four targets:
+
+- `Pretext`: core layout engine
+- `PretextUI`: optional SwiftUI bridge for `FontDescriptor`
+- `Demo`: interactive sample app
+- `Benchmark`: standalone benchmark app backed by shared benchmark support code
+
+```bash
+# Launch the macOS demo app
+rake demo
+
+# Run the full SwiftPM test suite
+rake test
+
+# Run the CLI benchmark
+rake bench
+```
+
+Requires Xcode with iOS 18 / macOS 15 / watchOS 11 SDK support and Swift 6.0+.
 
 ## API
 
