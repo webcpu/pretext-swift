@@ -26,7 +26,7 @@ final class BenchmarkCompactLayoutTests: XCTestCase {
 
         XCTAssertEqual(
             compactBenchmarkMetrics(for: result, platform: .standard).map(\.label),
-            ["Pretext", "Core Text", "SwiftUI", "Vs CT", "Vs SUI"]
+            ["Pretext", "Core Text", "SwiftUI", "Vs CT", "Vs SwiftUI"]
         )
         XCTAssertEqual(
             compactBenchmarkMetrics(for: result, platform: .standard).map(\.value),

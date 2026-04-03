@@ -62,6 +62,21 @@ enum BenchmarkResultsLayoutStyle: Equatable {
     }
 }
 
+enum BenchmarkLabels {
+    static let test = "TEST"
+    static let pretext = "PRETEXT"
+    static let coreText = "CORE TEXT"
+    static let swiftUI = "SWIFTUI"
+    static let speedupVsCoreText = "VS CT"
+    static let speedupVsSwiftUI = "VS SWIFTUI"
+
+    static let compactPretext = "Pretext"
+    static let compactCoreText = "Core Text"
+    static let compactSwiftUI = "SwiftUI"
+    static let compactSpeedupVsCoreText = "Vs CT"
+    static let compactSpeedupVsSwiftUI = "Vs SwiftUI"
+}
+
 func benchmarkViewProfile(for layoutStyle: BenchmarkResultsLayoutStyle) -> BenchmarkViewProfile {
     switch layoutStyle {
     case .table:
@@ -254,11 +269,11 @@ func compactBenchmarkMetrics(
     platform: BenchmarkPresentationPlatform = .current
 ) -> [BenchmarkMetricDisplay] {
     let leadingMetrics = [
-        BenchmarkMetricDisplay(label: "Pretext", value: formatBenchmarkMs(result.pretextMs), tone: .accent),
-        BenchmarkMetricDisplay(label: "Core Text", value: formatBenchmarkMs(result.coreTextMs), tone: .standard),
+        BenchmarkMetricDisplay(label: BenchmarkLabels.compactPretext, value: formatBenchmarkMs(result.pretextMs), tone: .accent),
+        BenchmarkMetricDisplay(label: BenchmarkLabels.compactCoreText, value: formatBenchmarkMs(result.coreTextMs), tone: .standard),
     ]
     let speedupMetric = BenchmarkMetricDisplay(
-        label: "Vs CT",
+        label: BenchmarkLabels.compactSpeedupVsCoreText,
         value: formatBenchmarkSpeedup(result.speedupVsCoreText),
         tone: benchmarkSpeedupTone(result.speedupVsCoreText)
     )
@@ -270,13 +285,13 @@ func compactBenchmarkMetrics(
         return leadingMetrics
             + [
                 BenchmarkMetricDisplay(
-                    label: "SwiftUI",
+                    label: BenchmarkLabels.compactSwiftUI,
                     value: result.swiftUIMs.map(formatBenchmarkMs) ?? "—",
                     tone: result.swiftUIMs == nil ? .muted : .standard
                 ),
                 speedupMetric,
                 BenchmarkMetricDisplay(
-                    label: "Vs SUI",
+                    label: BenchmarkLabels.compactSpeedupVsSwiftUI,
                     value: result.speedupVsSwiftUI.map(formatBenchmarkSpeedup) ?? "—",
                     tone: result.speedupVsSwiftUI.map(benchmarkSpeedupTone) ?? .muted
                 ),

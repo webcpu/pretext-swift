@@ -175,12 +175,12 @@ public struct BenchmarkView: View {
         VStack(spacing: 0) {
             // Header row
             HStack(spacing: 0) {
-                tableCell("TEST", width: 260, alignment: .leading, isHeader: true)
-                tableCell("PRETEXT", width: 100, isHeader: true)
-                tableCell("CORE TEXT", width: 100, isHeader: true)
-                tableCell("SWIFTUI", width: 100, isHeader: true)
-                tableCell("VS CT", width: 80, isHeader: true)
-                tableCell("VS SUI", width: 80, isHeader: true)
+                tableCell(BenchmarkLabels.test, width: 260, alignment: .leading, isHeader: true)
+                tableCell(BenchmarkLabels.pretext, width: 100, isHeader: true)
+                tableCell(BenchmarkLabels.coreText, width: 100, isHeader: true)
+                tableCell(BenchmarkLabels.swiftUI, width: 100, isHeader: true)
+                tableCell(BenchmarkLabels.speedupVsCoreText, width: 80, isHeader: true)
+                tableCell(BenchmarkLabels.speedupVsSwiftUI, width: 80, isHeader: true)
             }
             .padding(.vertical, 8)
             .background(.white.opacity(0.05))
